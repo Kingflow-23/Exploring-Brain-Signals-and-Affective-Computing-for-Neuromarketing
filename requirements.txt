@@ -3,3 +3,7 @@ torch
 scipy
 numpy
 pandas
+sklearn
+keras
+pickle
+tensorflow
