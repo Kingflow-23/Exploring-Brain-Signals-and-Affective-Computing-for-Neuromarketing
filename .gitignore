@@ -1,5 +1,8 @@
+*.ipynb
+
+# data
 data/*
 !data/.gitkeep
 
-src/*
-!src/.gitkeep
+# Notebooks
+notebooks/*
