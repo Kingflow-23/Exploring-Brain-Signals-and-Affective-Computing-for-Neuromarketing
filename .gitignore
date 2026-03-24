@@ -1,4 +1,10 @@
 *.ipynb
+*__pycache__/
+*.pyc
+*.pdf
+*.pptx
+*.xlsx
+*.docx
 
 # data
 data/*
