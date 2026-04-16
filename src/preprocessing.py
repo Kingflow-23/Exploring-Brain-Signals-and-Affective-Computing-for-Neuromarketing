@@ -105,6 +105,7 @@ logger = logging.getLogger("EEG_PREPROCESSOR")
 # NORMALIZATION
 # =============================================================================
 
+
 def zscore_normalize(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     """
     Apply channel-wise z-score normalization.
@@ -130,10 +131,11 @@ def zscore_normalize(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
 # WINDOWING FUNCTION
 # =============================================================================
 
+
 def sliding_window(
     signal: np.ndarray,
-    window_size: int = 400,   # 2 seconds @ 200 Hz
-    step_size: int = 200      # 50% overlap
+    window_size: int = 400,  # 2 seconds @ 200 Hz
+    step_size: int = 200,  # 50% overlap
 ) -> np.ndarray:
     """
     Convert continuous EEG trial into overlapping fixed-size windows.
@@ -168,11 +170,12 @@ def sliding_window(
 # FULL PREPROCESSING PIPELINE
 # =============================================================================
 
+
 def preprocess_trial(
     signal: np.ndarray,
     normalize: bool = True,
     window_size: int = 400,
-    step_size: int = 200
+    step_size: int = 200,
 ) -> np.ndarray:
     """
     Full preprocessing pipeline for one EEG trial.
@@ -189,11 +192,7 @@ def preprocess_trial(
     if normalize:
         signal = zscore_normalize(signal)
 
-    windows = sliding_window(
-        signal,
-        window_size=window_size,
-        step_size=step_size
-    )
+    windows = sliding_window(signal, window_size=window_size, step_size=step_size)
 
     return windows
 
@@ -201,6 +200,7 @@ def preprocess_trial(
 # =============================================================================
 # DATASET-LEVEL PROCESSOR
 # =============================================================================
+
 
 def preprocess_dataset(dataset: list) -> list:
     """
@@ -237,16 +237,17 @@ def preprocess_dataset(dataset: list) -> list:
 
         windows = preprocess_trial(signal)
 
-        processed.append({
-            "windows": windows,
-            "label": sample["label"],
-            "subject": sample["subject"],
-            "trial": sample["trial"]
-        })
+        processed.append(
+            {
+                "windows": windows,
+                "label": sample["label"],
+                "subject": sample["subject"],
+                "trial": sample["trial"],
+            }
+        )
 
         logger.info(
-            f"Processed sample {idx+1}/{len(dataset)} | "
-            f"windows: {windows.shape}"
+            f"Processed sample {idx+1}/{len(dataset)} | " f"windows: {windows.shape}"
         )
 
     logger.info("EEG preprocessing completed.")
