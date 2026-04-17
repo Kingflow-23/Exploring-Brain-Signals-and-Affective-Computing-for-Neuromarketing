@@ -192,11 +192,10 @@ def load_subject(file_path, labels, subject_id):
         # Ensure labels are numpy array
         labels = np.array(labels)
 
-        # Handle both SEED label formats
-        if labels.ndim == 1:
-            label = int(labels[i - 1])
-        else:
-            label = int(labels[subject_id - 1, i - 1])
+        # SEED dataset: labels are shared across subjects
+        labels_flat = labels.flatten()
+
+        label = int(labels_flat[i - 1])
 
         samples.append(
             {
