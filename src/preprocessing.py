@@ -98,6 +98,8 @@ DESIGN CHOICES
 import numpy as np
 import logging
 
+from config import WINDOW_SIZE, STEP_SIZE
+
 logger = logging.getLogger("EEG_PREPROCESSOR")
 
 
@@ -134,8 +136,8 @@ def zscore_normalize(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
 
 def sliding_window(
     signal: np.ndarray,
-    window_size: int = 400,  # 2 seconds @ 200 Hz
-    step_size: int = 200,  # 50% overlap
+    window_size: int = WINDOW_SIZE,
+    step_size: int = STEP_SIZE,
 ) -> np.ndarray:
     """
     Convert continuous EEG trial into overlapping fixed-size windows.
