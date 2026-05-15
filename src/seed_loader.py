@@ -180,6 +180,9 @@ def load_subject(file_path, labels, subject_id):
 
     samples = []
 
+    # SEED dataset: labels are shared across subjects
+    labels_flat = labels.flatten()
+
     for i in range(1, N_TRIALS + 1):
         key = f"{prefix}{EEG_KEY_PATTERN}{i}"
 
@@ -191,9 +194,6 @@ def load_subject(file_path, labels, subject_id):
 
         # Ensure labels are numpy array
         labels = np.array(labels)
-
-        # SEED dataset: labels are shared across subjects
-        labels_flat = labels.flatten()
 
         label = int(labels_flat[i - 1])
 
@@ -277,7 +277,6 @@ def build_seed_dataset(folder_path):
             dataset.extend(samples)
 
         except Exception as e:
-            logger.error(f"Failed subject {subject_id}: {e}")
             logger.error(f"Failed subject {subject_id}: {e}")
 
     logger.info(f"Dataset built successfully: {len(dataset)} samples")
