@@ -52,6 +52,7 @@ DEFAULT_FS = 200
 DEFAULT_MODEL = "local-model"
 
 ALLOWED_LABELS = {"positive", "neutral", "negative"}
+LABELS_MAPPER = {"positive": 2, "neutral": 1, "negative": 0}
 LABELS_MAP = {-1: 0, 0: 1, 1: 2}  # Map SEED labels to indices for classification
 
 # =============================================================================
