@@ -98,7 +98,7 @@ DESIGN CHOICES
 import numpy as np
 import logging
 
-from config import WINDOW_SIZE, STEP_SIZE
+from config import WINDOW_SIZE, STEP_SIZE, LABELS_MAP
 
 logger = logging.getLogger("EEG_PREPROCESSOR")
 
@@ -242,7 +242,7 @@ def preprocess_dataset(dataset: list) -> list:
         processed.append(
             {
                 "windows": windows,
-                "label": sample["label"],
+                "label": LABELS_MAP[sample["label"]],
                 "subject": sample["subject"],
                 "trial": sample["trial"],
             }
