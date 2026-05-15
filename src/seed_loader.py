@@ -192,10 +192,10 @@ def load_subject(file_path, labels, subject_id):
 
         signal = np.array(mat[key])
 
-        # Ensure labels are numpy array
-        labels = np.array(labels)
-
         label = int(labels_flat[i - 1])
+
+        if signal.ndim != 2:
+            raise ValueError(f"Invalid signal shape: {signal.shape}")
 
         samples.append(
             {
