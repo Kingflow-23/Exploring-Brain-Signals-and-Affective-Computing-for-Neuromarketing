@@ -1,6 +1,11 @@
+# =============================================================================
+# BASELINE TRAINING PIPELINE (CLASSICAL ML ONLY)
+# =============================================================================
+
 import os
 import time
 import json
+import joblib
 import logging
 import numpy as np
 
@@ -14,7 +19,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.neural_network import MLPClassifier
 
 from seed_loader import build_seed_dataset
 from preprocessing import preprocess_dataset
@@ -27,10 +31,11 @@ from config import DATASET_DIR, MODEL_DIR, RANDOM_STATE, TEST_SIZE
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
 )
-logger = logging.getLogger("TRAINER")
+logger = logging.getLogger("BASELINE_TRAINER")
+
 
 # =============================================================================
-# UTILITIES
+# UTILS
 # =============================================================================
 
 
@@ -44,14 +49,37 @@ def get_model_dir(name: str):
     return path
 
 
-def flatten_processed_dataset(processed_dataset):
-    """
-    Converts (62, W) EEG windows into flat feature vectors.
+def save_json(path, obj):
+    with open(path, "w") as f:
+        json.dump(obj, f, indent=4)
 
-    Output:
-        X: (N_samples, 62*W)
-        y: labels
-        groups: subject IDs
+
+def save_artifacts(model, name, y_true, y_pred):
+    model_dir = get_model_dir(name)
+
+    joblib.dump(model, os.path.join(model_dir, "model.pkl"))
+
+    acc = float(accuracy_score(y_true, y_pred))
+    report = classification_report(y_true, y_pred, output_dict=True)
+    cm = confusion_matrix(y_true, y_pred)
+
+    save_json(
+        os.path.join(model_dir, "metrics.json"),
+        {"accuracy": acc, "classification_report": report},
+    )
+
+    np.save(os.path.join(model_dir, "confusion.npy"), cm)
+
+
+# =============================================================================
+# FEATURE EXTRACTION (CLASSICAL ML ONLY)
+# =============================================================================
+
+
+def flatten_windows(processed_dataset):
+    """
+    Classical ML representation:
+        (62, W) → (62*W,)
     """
     X, y, groups = [], [], []
 
@@ -69,26 +97,6 @@ def flatten_processed_dataset(processed_dataset):
         np.asarray(y, dtype=np.int64),
         np.asarray(groups, dtype=np.int64),
     )
-
-
-def save_json(path, obj):
-    with open(path, "w") as f:
-        json.dump(obj, f, indent=4)
-
-
-def save_artifacts(model, name, y_true, y_pred):
-    model_dir = get_model_dir(name)
-
-    acc = float(accuracy_score(y_true, y_pred))
-    report = classification_report(y_true, y_pred, output_dict=True)
-    cm = confusion_matrix(y_true, y_pred)
-
-    save_json(
-        os.path.join(model_dir, "metrics.json"),
-        {"accuracy": acc, "classification_report": report},
-    )
-
-    np.save(os.path.join(model_dir, "confusion.npy"), cm)
 
 
 # =============================================================================
@@ -114,34 +122,12 @@ def build_models():
         "svm_rbf": Pipeline(
             [
                 ("scaler", StandardScaler()),
-                (
-                    "model",
-                    SVC(
-                        kernel="rbf",
-                        gamma="scale",
-                        class_weight="balanced",
-                        probability=False,
-                        random_state=RANDOM_STATE,
-                    ),
-                ),
+                ("model", SVC(kernel="rbf", class_weight="balanced", gamma="scale")),
             ]
         ),
         "knn": KNeighborsClassifier(n_neighbors=5),
         "random_forest": RandomForestClassifier(
             n_estimators=300, n_jobs=-1, random_state=RANDOM_STATE
-        ),
-        "mlp": Pipeline(
-            [
-                ("scaler", StandardScaler()),
-                (
-                    "model",
-                    MLPClassifier(
-                        hidden_layer_sizes=(256, 128),
-                        max_iter=500,
-                        random_state=RANDOM_STATE,
-                    ),
-                ),
-            ]
         ),
     }
 
@@ -158,13 +144,13 @@ def train_all_models(X_train, y_train, X_test, y_test):
     for name, model in models.items():
         logger.info(f"Training {name}")
 
-        start = time.time()
+        t0 = time.time()
         model.fit(X_train, y_train)
-        train_time = time.time() - start
+        train_time = time.time() - t0
 
-        start = time.time()
+        t0 = time.time()
         preds = model.predict(X_test)
-        infer_time = time.time() - start
+        infer_time = time.time() - t0
 
         acc = float(accuracy_score(y_test, preds))
 
@@ -192,7 +178,7 @@ def main():
     raw = build_seed_dataset(DATASET_DIR)
     processed = preprocess_dataset(raw)
 
-    X, y, groups = flatten_processed_dataset(processed)
+    X, y, groups = flatten_windows(processed)
 
     splitter = GroupShuffleSplit(
         n_splits=1, test_size=TEST_SIZE, random_state=RANDOM_STATE
