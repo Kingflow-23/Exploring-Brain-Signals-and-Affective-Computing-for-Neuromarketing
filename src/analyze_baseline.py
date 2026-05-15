@@ -12,10 +12,10 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 from config import MODEL_DIR, RANDOM_STATE
 
-
 # =============================================================================
 # MODEL DISCOVERY
 # =============================================================================
+
 
 def find_all_models(model_dir=MODEL_DIR):
     """
@@ -34,10 +34,12 @@ def find_all_models(model_dir=MODEL_DIR):
 
     for root, _, files in os.walk(model_dir):
         if "model.pkl" in files:
-            models.append({
-                "name": os.path.basename(root),
-                "path": os.path.join(root, "model.pkl")
-            })
+            models.append(
+                {
+                    "name": os.path.basename(root),
+                    "path": os.path.join(root, "model.pkl"),
+                }
+            )
 
     return models
 
@@ -50,6 +52,7 @@ def load_model(path):
 # =============================================================================
 # SAFE MODEL REPLICATION
 # =============================================================================
+
 
 def safe_clone_model(model):
     """
@@ -66,14 +69,9 @@ def safe_clone_model(model):
 # LEARNING CURVE COMPUTATION
 # =============================================================================
 
+
 def compute_learning_curve(
-    model,
-    X_train,
-    y_train,
-    X_test,
-    y_test,
-    steps=5,
-    stratified=True
+    model, X_train, y_train, X_test, y_test, steps=5, stratified=True
 ):
     """
     Computes learning curve for a SINGLE model.
@@ -108,9 +106,7 @@ def compute_learning_curve(
         # -------------------------------
         if stratified:
             splitter = StratifiedShuffleSplit(
-                n_splits=1,
-                train_size=size,
-                random_state=RANDOM_STATE + i
+                n_splits=1, train_size=size, random_state=RANDOM_STATE + i
             )
             idx, _ = next(splitter.split(X_train, y_train))
         else:
@@ -131,11 +127,9 @@ def compute_learning_curve(
         m.fit(X_sub, y_sub)
         acc = m.score(X_test, y_test)
 
-        results.append({
-            "fraction": float(frac),
-            "size": int(size),
-            "accuracy": float(acc)
-        })
+        results.append(
+            {"fraction": float(frac), "size": int(size), "accuracy": float(acc)}
+        )
 
     return results
 
@@ -143,6 +137,7 @@ def compute_learning_curve(
 # =============================================================================
 # VISUALIZATION
 # =============================================================================
+
 
 def plot_curve(curve, title, save_path=None):
     """
@@ -173,13 +168,8 @@ def plot_curve(curve, title, save_path=None):
 # FULL PIPELINE RUNNER
 # =============================================================================
 
-def run_all_learning_curves(
-    X_train,
-    y_train,
-    X_test,
-    y_test,
-    save_plots=True
-):
+
+def run_all_learning_curves(X_train, y_train, X_test, y_test, save_plots=True):
     """
     Runs learning curves for ALL models in MODEL_DIR recursively.
 
@@ -204,11 +194,7 @@ def run_all_learning_curves(
         model = load_model(path)
 
         curve = compute_learning_curve(
-            model=model,
-            X_train=X_train,
-            y_train=y_train,
-            X_test=X_test,
-            y_test=y_test
+            model=model, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test
         )
 
         results[name] = curve
@@ -218,7 +204,7 @@ def run_all_learning_curves(
             plot_curve(
                 curve,
                 title=f"Learning Curve - {name}",
-                save_path=os.path.join(MODEL_DIR, name, "learning_curve.png")
+                save_path=os.path.join(MODEL_DIR, name, "learning_curve.png"),
             )
         else:
             plot_curve(curve, name)
@@ -229,6 +215,7 @@ def run_all_learning_curves(
 # =============================================================================
 # OPTIONAL SAVE
 # =============================================================================
+
 
 def save_analysis(results, path):
     """Save full analysis results as JSON."""
