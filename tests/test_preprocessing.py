@@ -113,4 +113,4 @@ def test_preprocess_dataset():
         assert "windows" in item
         assert item["windows"].ndim == 3
         assert item["windows"].shape[1] == 62
-        assert item["label"] in [-1, 0, 1]
+        assert item["label"] in [0, 1, 2]

@@ -24,10 +24,10 @@ from llm_inference import (
     predict_emotion_from_eeg,
 )
 
-
 # =============================================================================
 # FIXTURE
 # =============================================================================
+
 
 def fake_eeg_signal():
     """
@@ -44,6 +44,7 @@ def fake_eeg_signal():
 # TEST 1 — FEATURE EXTRACTION
 # =============================================================================
 
+
 def test_extract_eeg_features():
     signal = fake_eeg_signal()
 
@@ -51,9 +52,16 @@ def test_extract_eeg_features():
 
     # --- keys exist
     expected_keys = [
-        "mean", "std", "max", "min", "energy",
-        "theta_ratio", "alpha_ratio", "beta_ratio", "gamma_ratio",
-        "activity"
+        "mean",
+        "std",
+        "max",
+        "min",
+        "energy",
+        "theta_ratio",
+        "alpha_ratio",
+        "beta_ratio",
+        "gamma_ratio",
+        "activity",
     ]
 
     for k in expected_keys:
@@ -67,6 +75,7 @@ def test_extract_eeg_features():
 # =============================================================================
 # TEST 2 — PROMPT GENERATION
 # =============================================================================
+
 
 def test_build_eeg_prompt():
     features = {
@@ -99,6 +108,7 @@ def test_build_eeg_prompt():
 # TEST 3 — MOCK LLM CLIENT
 # =============================================================================
 
+
 class MockLLM:
     def generate(self, prompt: str):
         return "neutral"
@@ -125,6 +135,7 @@ def test_full_pipeline():
 # =============================================================================
 # TEST 4 — PROMPT CONSISTENCY
 # =============================================================================
+
 
 def test_prompt_contains_values():
     signal = fake_eeg_signal()
