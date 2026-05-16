@@ -252,6 +252,6 @@ def preprocess_dataset(dataset: list) -> list:
             f"Processed sample {idx+1}/{len(dataset)} | " f"windows: {windows.shape}"
         )
 
-    logger.info("EEG preprocessing completed.")
+    logger.info("EEG preprocessing completed. ✅")
 
     return processed

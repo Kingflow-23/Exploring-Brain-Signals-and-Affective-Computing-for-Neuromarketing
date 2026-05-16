@@ -279,6 +279,6 @@ def build_seed_dataset(folder_path):
         except Exception as e:
             logger.error(f"Failed subject {subject_id}: {e}")
 
-    logger.info(f"Dataset built successfully: {len(dataset)} samples")
+    logger.info(f"Dataset built successfully ✅: {len(dataset)} samples")
 
     return dataset
