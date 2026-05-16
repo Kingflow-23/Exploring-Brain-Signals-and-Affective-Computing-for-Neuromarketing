@@ -26,8 +26,9 @@ from braindecode.models import EEGNetv4, Deep4Net
 # =============================================================================
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 )
+
 logger = logging.getLogger("DEEP_TRAINER")
 
 
@@ -38,11 +39,14 @@ logger = logging.getLogger("DEEP_TRAINER")
 
 def ensure_dir():
     os.makedirs(MODEL_DIR, exist_ok=True)
+    logger.info(f"Model directory ready: {MODEL_DIR}")
 
 
 def save_json(path, obj):
     with open(path, "w") as f:
         json.dump(obj, f, indent=4)
+
+    logger.info(f"Saved JSON: {path}")
 
 
 # =============================================================================
@@ -52,27 +56,51 @@ def save_json(path, obj):
 
 def build_deep_dataset(processed):
     """
-    Keeps spatial + temporal structure.
+    Keeps EEG spatial + temporal structure.
 
     Output:
         X: (N, 1, 62, W)
         y: (N,)
-        groups: subject IDs
+        groups: (N,)
     """
+
+    logger.info("Building deep learning dataset...")
 
     X, y, g = [], [], []
 
-    for sample in processed:
-        for w in sample["windows"]:
-            X.append(w[np.newaxis, :, :])  # (1, 62, W)
-            y.append(sample["label"])
-            g.append(sample["subject"])
+    total_windows = 0
 
-    return (
-        np.asarray(X, dtype=np.float32),
-        np.asarray(y, dtype=np.int64),
-        np.asarray(g, dtype=np.int64),
-    )
+    for sample_idx, sample in enumerate(processed):
+
+        windows = sample["windows"]
+        label = sample["label"]
+        subject = sample["subject"]
+
+        logger.info(
+            f"Sample {sample_idx+1}/{len(processed)} | "
+            f"subject={subject} | "
+            f"label={label} | "
+            f"windows={len(windows)}"
+        )
+
+        for w in windows:
+            X.append(w[np.newaxis, :, :])  # (1, 62, W)
+            y.append(label)
+            g.append(subject)
+
+        total_windows += len(windows)
+
+    X = np.asarray(X, dtype=np.float32)
+    y = np.asarray(y, dtype=np.int64)
+    g = np.asarray(g, dtype=np.int64)
+
+    logger.info(f"Deep dataset created")
+    logger.info(f"X shape: {X.shape}")
+    logger.info(f"y shape: {y.shape}")
+    logger.info(f"groups shape: {g.shape}")
+    logger.info(f"Total windows: {total_windows}")
+
+    return X, y, g
 
 
 # =============================================================================
@@ -80,12 +108,22 @@ def build_deep_dataset(processed):
 # =============================================================================
 
 
-def train_model(model, X_train, y_train, X_test, y_test, epochs=10, batch_size=64):
+def train_model(
+    model, model_name, X_train, y_train, X_test, y_test, epochs=10, batch_size=64
+):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    logger.info("=" * 80)
+    logger.info(f"TRAINING MODEL: {model_name}")
+    logger.info(f"Using device: {device}")
+
     model.to(device)
 
-    logger.info(f"Using device: {device}")
+    logger.info(f"Train samples: {len(X_train)}")
+    logger.info(f"Test samples: {len(X_test)}")
+    logger.info(f"Batch size: {batch_size}")
+    logger.info(f"Epochs: {epochs}")
 
     dataset = TensorDataset(
         torch.tensor(X_train, dtype=torch.float32),
@@ -94,42 +132,98 @@ def train_model(model, X_train, y_train, X_test, y_test, epochs=10, batch_size=6
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
+    logger.info(f"Number of batches per epoch: {len(loader)}")
+
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.CrossEntropyLoss()
 
-    # ---------------- TRAIN ----------------
+    # =========================================================================
+    # TRAINING
+    # =========================================================================
+
+    logger.info("Starting training loop...")
+
     model.train()
-    t0 = time.time()
+
+    train_start = time.time()
 
     for ep in range(epochs):
-        total_loss = 0
 
-        for xb, yb in loader:
-            xb, yb = xb.to(device), yb.to(device)
+        epoch_start = time.time()
+
+        total_loss = 0.0
+
+        for batch_idx, (xb, yb) in enumerate(loader):
+
+            xb = xb.to(device)
+            yb = yb.to(device)
 
             opt.zero_grad()
+
             out = model(xb)
+
             loss = loss_fn(out, yb)
 
             loss.backward()
+
             opt.step()
 
             total_loss += loss.item()
 
-        logger.info(f"epoch {ep+1}/{epochs} | loss={total_loss:.4f}")
+            # batch logging
+            if (batch_idx + 1) % 10 == 0 or batch_idx == 0:
+                logger.info(
+                    f"[{model_name}] "
+                    f"epoch={ep+1}/{epochs} | "
+                    f"batch={batch_idx+1}/{len(loader)} | "
+                    f"loss={loss.item():.6f}"
+                )
 
-    train_time = time.time() - t0
+        epoch_time = time.time() - epoch_start
+        avg_loss = total_loss / len(loader)
 
-    # ---------------- EVAL ----------------
+        logger.info(
+            f"[{model_name}] "
+            f"epoch={ep+1}/{epochs} COMPLETE | "
+            f"avg_loss={avg_loss:.6f} | "
+            f"time={epoch_time:.2f}s"
+        )
+
+    train_time = time.time() - train_start
+
+    logger.info(f"Training completed in {train_time:.2f}s")
+
+    # =========================================================================
+    # EVALUATION
+    # =========================================================================
+
+    logger.info(f"Evaluating model: {model_name}")
+
     model.eval()
 
+    eval_start = time.time()
+
     with torch.no_grad():
+
         xb = torch.tensor(X_test, dtype=torch.float32).to(device)
-        preds = model(xb).argmax(dim=1).cpu().numpy()
 
-    acc = float((preds == y_test).mean())
+        logits = model(xb)
 
-    return acc, train_time
+        preds = logits.argmax(dim=1).cpu().numpy()
+
+    eval_time = time.time() - eval_start
+
+    acc = accuracy_score(y_test, preds)
+
+    logger.info(f"{model_name} evaluation completed")
+    logger.info(f"{model_name} accuracy: {acc:.4f}")
+    logger.info(f"{model_name} inference time: {eval_time:.2f}s")
+
+    return {
+        "accuracy": float(acc),
+        "train_time": float(train_time),
+        "inference_time": float(eval_time),
+    }
 
 
 # =============================================================================
@@ -139,7 +233,9 @@ def train_model(model, X_train, y_train, X_test, y_test, epochs=10, batch_size=6
 
 def build_models(n_chans=62, n_classes=3, window_size=400):
 
-    return {
+    logger.info("Building deep learning models...")
+
+    models = {
         "eegnet": EEGNetv4(
             n_chans=n_chans,
             n_outputs=n_classes,
@@ -147,9 +243,18 @@ def build_models(n_chans=62, n_classes=3, window_size=400):
             final_conv_length="auto",
         ),
         "deepconvnet": Deep4Net(
-            n_chans=n_chans, n_outputs=n_classes, input_window_samples=window_size
+            n_chans=n_chans,
+            n_outputs=n_classes,
+            input_window_samples=window_size,
         ),
     }
+
+    logger.info(f"Built {len(models)} deep models")
+
+    for name in models.keys():
+        logger.info(f"Registered model: {name}")
+
+    return models
 
 
 # =============================================================================
@@ -159,17 +264,33 @@ def build_models(n_chans=62, n_classes=3, window_size=400):
 
 def train_all(X_train, y_train, X_test, y_test):
 
+    logger.info("=" * 80)
+    logger.info("STARTING DEEP LEARNING BENCHMARK")
+    logger.info("=" * 80)
+
     results = {}
+
     models = build_models(window_size=X_train.shape[-1])
 
     for name, model in models.items():
-        logger.info(f"[DEEP] Training {name}")
 
-        acc, train_time = train_model(model, X_train, y_train, X_test, y_test)
+        logger.info(f"Launching training for: {name}")
 
-        results[name] = {"accuracy": acc, "train_time": train_time}
+        metrics = train_model(
+            model=model,
+            model_name=name,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+        )
 
-        logger.info(f"{name}: acc={acc:.4f}")
+        results[name] = metrics
+
+        logger.info(f"{name} finished successfully")
+        logger.info(f"{name} metrics: {metrics}")
+
+    logger.info("All deep models completed")
 
     return results
 
@@ -181,12 +302,26 @@ def train_all(X_train, y_train, X_test, y_test):
 
 def main():
 
+    logger.info("=" * 80)
+    logger.info("DEEP EEG TRAINING PIPELINE STARTED")
+    logger.info("=" * 80)
+
     ensure_dir()
 
+    logger.info("Loading raw SEED dataset...")
     raw = build_seed_dataset(DATASET_DIR)
+
+    logger.info(f"Raw samples loaded: {len(raw)}")
+
+    logger.info("Running preprocessing pipeline...")
     processed = preprocess_dataset(raw)
 
+    logger.info(f"Processed samples: {len(processed)}")
+
+    logger.info("Building deep dataset...")
     X, y, groups = build_deep_dataset(processed)
+
+    logger.info("Performing subject-wise split...")
 
     splitter = GroupShuffleSplit(
         n_splits=1, test_size=TEST_SIZE, random_state=RANDOM_STATE
@@ -194,14 +329,26 @@ def main():
 
     train_idx, test_idx = next(splitter.split(X, y, groups))
 
-    X_train, X_test = X[train_idx], X[test_idx]
-    y_train, y_test = y[train_idx], y[test_idx]
+    X_train = X[train_idx]
+    X_test = X[test_idx]
+
+    y_train = y[train_idx]
+    y_test = y[test_idx]
+
+    logger.info(f"Train shape: {X_train.shape}")
+    logger.info(f"Test shape: {X_test.shape}")
+
+    logger.info("Starting benchmark training...")
 
     results = train_all(X_train, y_train, X_test, y_test)
 
-    save_json(os.path.join(MODEL_DIR, "deep_benchmark.json"), results)
+    output_path = os.path.join(MODEL_DIR, "deep_benchmark.json")
 
-    logger.info("DONE")
+    save_json(output_path, results)
+
+    logger.info("=" * 80)
+    logger.info("DEEP TRAINING PIPELINE FINISHED")
+    logger.info("=" * 80)
 
 
 if __name__ == "__main__":
