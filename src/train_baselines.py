@@ -15,6 +15,8 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from scipy.signal import butter, filtfilt
+
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
@@ -36,13 +38,102 @@ logging.basicConfig(
 logger = logging.getLogger("BASELINE_TRAINER")
 
 # =============================================================================
+# EEG BAND FILTERING
+# =============================================================================
+
+
+FS = 200
+NYQ = 0.5 * FS
+ORDER = 5
+
+
+def create_filters():
+    """
+    Create bandpass Butterworth filters for EEG frequency bands.
+
+    Returns
+    -------
+    dict
+        Mapping of band name → (b, a) filter coefficients.
+
+    Notes
+    -----
+    Bands used:
+        - theta: 4–8 Hz
+        - alpha: 8–13 Hz
+        - beta : 13–30 Hz
+        - gamma: 30–45 Hz
+
+    Each filter is designed using a 5th-order Butterworth design
+    normalized by Nyquist frequency (FS/2).
+    """
+    bands = {
+        "theta": (4, 8),
+        "alpha": (8, 13),
+        "beta": (13, 30),
+        "gamma": (30, 45),
+    }
+
+    filters = {}
+
+    for name, (low, high) in bands.items():
+        b, a = butter(ORDER, [low / NYQ, high / NYQ], btype="band")
+        filters[name] = (b, a)
+
+    return filters
+
+
+FILTERS = create_filters()
+
+
+def extract_features(window):
+    """
+    Extract bandpower features from a single EEG window.
+
+    Parameters
+    ----------
+    window : np.ndarray
+        EEG segment of shape (n_channels, n_samples),
+        typically (62, T) for SEED dataset.
+
+    Returns
+    -------
+    np.ndarray
+        Feature vector of shape (62 * 4,) containing log bandpower
+        for theta, alpha, beta, and gamma bands concatenated.
+
+    Processing Steps
+    ----------------
+    1. Apply Butterworth bandpass filter per frequency band
+    2. Compute signal power per channel: mean(x^2)
+    3. Apply log transform for numerical stability
+    4. Concatenate all band features into a single vector
+    """
+    feats = np.empty(62 * 4, dtype=np.float32)
+
+    bands = ["theta", "alpha", "beta", "gamma"]
+
+    i = 0
+    for bname in bands:
+        b, a = FILTERS[bname]
+        sig = filtfilt(b, a, window, axis=1)
+        feats[i : i + 62] = np.log(np.mean(sig**2, axis=1) + 1e-8)
+        i += 62
+
+    return feats
+
+
+# =============================================================================
 # UTILS
 # =============================================================================
 
 
 def ensure_model_dir():
     """
-    Create model directory if it does not exist.
+    Ensure that the global model output directory exists.
+
+    Creates the directory defined in config.MODEL_DIR if missing.
+    This is the root folder for all trained model artifacts.
     """
     os.makedirs(MODEL_DIR, exist_ok=True)
     logger.info(f"Model directory ready: {MODEL_DIR}")
@@ -50,7 +141,25 @@ def ensure_model_dir():
 
 def get_model_dir(name: str):
     """
-    Create subdirectory for a specific model.
+    Create and return a model-specific output directory.
+
+    Parameters
+    ----------
+    name : str
+        Name of the model (e.g., 'svm_rbf').
+
+    Returns
+    -------
+    str
+        Absolute path to the model's artifact directory.
+
+    Notes
+    -----
+    Used to isolate artifacts per model:
+        MODEL_DIR/
+            ├── svm_rbf/
+            ├── knn/
+            └── random_forest/
     """
     path = os.path.join(MODEL_DIR, name)
     os.makedirs(path, exist_ok=True)
@@ -62,7 +171,20 @@ def get_model_dir(name: str):
 
 def save_json(path, obj):
     """
-    Save dictionary as formatted JSON.
+    Save a Python dictionary as a formatted JSON file.
+
+    Parameters
+    ----------
+    path : str
+        Destination file path.
+    obj : dict
+        JSON-serializable object.
+
+    Notes
+    -----
+    Used for:
+        - metrics.json
+        - benchmark_summary.json
     """
     with open(path, "w") as f:
         json.dump(obj, f, indent=4)
@@ -72,10 +194,30 @@ def save_json(path, obj):
 
 def save_artifacts(model, name, y_true, y_pred):
     """
-    Save:
-        - trained model
-        - metrics
-        - confusion matrix
+    Persist trained model and evaluation outputs.
+
+    Parameters
+    ----------
+    model : sklearn estimator
+        Trained model pipeline.
+    name : str
+        Model identifier.
+    y_true : np.ndarray
+        Ground-truth labels.
+    y_pred : np.ndarray
+        Model predictions.
+
+    Outputs
+    -------
+    Saved in MODEL_DIR/<name>/:
+        - model.pkl            (serialized model)
+        - metrics.json         (accuracy + classification report)
+        - confusion.npy        (raw confusion matrix)
+
+    Notes
+    -----
+    This function is the final checkpoint of each training run.
+    It ensures full reproducibility of model performance.
     """
 
     logger.info(f"Saving artifacts for model: {name}")
@@ -116,46 +258,81 @@ def save_artifacts(model, name, y_true, y_pred):
 # =============================================================================
 
 
-def flatten_windows(processed_dataset):
+def extract_sample_features(sample):
     """
-    Convert EEG windows into flat vectors for classical ML.
+    Extract features for all EEG windows in a single sample.
 
-    Input:
-        (62, W)
+    Parameters
+    ----------
+    sample : dict
+        Dictionary containing:
+            - "windows": list/array of EEG windows (n_windows, 62, T)
 
-    Output:
-        (62 * W,)
+    Returns
+    -------
+    np.ndarray
+        Feature matrix of shape (n_windows, 62 * 4)
+
+    Notes
+    -----
+    Each window is independently converted into a bandpower vector.
     """
+    windows = np.asarray(sample["windows"])  # (n_windows, 62, T)
 
-    logger.info("Flattening EEG windows into feature vectors...")
+    feats = np.zeros((len(windows), 62 * 4), dtype=np.float32)
+
+    for i, window in enumerate(windows):
+        feats[i] = extract_features(window)
+
+    return feats
+
+
+def extract_dataset_features(processed_dataset):
+    """
+    Convert full EEG dataset into supervised learning arrays.
+
+    Parameters
+    ----------
+    processed_dataset : list of dict
+        Each entry contains:
+            - "windows": EEG segments
+            - "label": class label
+            - "subject": subject ID
+
+    Returns
+    -------
+    X : np.ndarray
+        Feature matrix of shape (N_samples, 62 * 4)
+    y : np.ndarray
+        Labels of shape (N_samples,)
+    groups : np.ndarray
+        Subject IDs for group-aware splitting
+
+    Notes
+    -----
+    - Each window becomes one training sample.
+    - Group labels are used to prevent subject leakage.
+    """
+    logger.info("Extracting bandpower EEG features...")
 
     X, y, groups = [], [], []
-
-    total_windows = 0
 
     for sample in processed_dataset:
 
         label = sample["label"]
         subject = sample["subject"]
 
-        for window in sample["windows"]:
+        feats = extract_sample_features(sample)
 
-            X.append(window.reshape(-1))
-            y.append(label)
-            groups.append(subject)
+        X.append(feats)
+        y.extend([label] * len(feats))
+        groups.extend([subject] * len(feats))
 
-            total_windows += 1
+    X = np.concatenate(X, axis=0).astype(np.float32)
+    y = np.asarray(y, dtype=np.int32)
+    groups = np.asarray(groups, dtype=np.int32)
 
-    logger.info(f"Total windows created: {total_windows}")
-
-    X = np.asarray(X, dtype=np.float32)
-    y = np.asarray(y, dtype=np.int64)
-    groups = np.asarray(groups, dtype=np.int64)
-
-    logger.info(f"X shape: {X.shape}")
-    logger.info(f"y shape: {y.shape}")
-    logger.info(f"groups shape: {groups.shape}")
-
+    logger.info(f"Feature shape: {X.shape}")
     return X, y, groups
 
 
@@ -166,21 +343,39 @@ def flatten_windows(processed_dataset):
 
 def build_models():
     """
-    Build baseline classical ML models.
+    Construct baseline classical machine learning models.
+
+    Returns
+    -------
+    dict
+        Mapping of model name → sklearn Pipeline
+
+    Models included
+    ---------------
+    - Logistic Regression (saga solver, balanced weights)
+    - SVM (RBF kernel)
+    - KNN (distance-weighted)
+    - Random Forest (200 trees)
+
+    Notes
+    -----
+    All models (except RF) include StandardScaler preprocessing.
+    Designed as baseline comparisons for EEG classification.
     """
 
-    logger.info("Building baseline models...")
+    logger.info("Building EEG bandpower models...")
 
     return {
         "logistic_regression": Pipeline(
             [
                 ("scaler", StandardScaler()),
                 (
-                    "model",
+                    "clf",
                     LogisticRegression(
                         max_iter=1000,
                         class_weight="balanced",
                         random_state=RANDOM_STATE,
+                        solver="saga",
                     ),
                 ),
             ]
@@ -188,21 +383,28 @@ def build_models():
         "svm_rbf": Pipeline(
             [
                 ("scaler", StandardScaler()),
-                (
-                    "model",
-                    SVC(
-                        kernel="rbf",
-                        class_weight="balanced",
-                        gamma="scale",
-                    ),
-                ),
+                ("clf", SVC(kernel="rbf", gamma="scale", class_weight="balanced")),
             ]
         ),
-        "knn": KNeighborsClassifier(n_neighbors=5),
-        "random_forest": RandomForestClassifier(
-            n_estimators=300,
-            n_jobs=-1,
-            random_state=RANDOM_STATE,
+        "knn": Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("clf", KNeighborsClassifier(n_neighbors=7, weights="distance")),
+            ]
+        ),
+        "random_forest": Pipeline(
+            [
+                (
+                    "clf",
+                    RandomForestClassifier(
+                        n_estimators=200,
+                        max_depth=25,
+                        min_samples_leaf=2,
+                        n_jobs=-1,
+                        random_state=RANDOM_STATE,
+                    ),
+                )
+            ]
         ),
     }
 
@@ -215,6 +417,37 @@ def build_models():
 def train_all_models(X_train, y_train, X_test, y_test):
     """
     Train and evaluate all baseline models.
+
+    Parameters
+    ----------
+    X_train : np.ndarray
+        Training features
+    y_train : np.ndarray
+        Training labels
+    X_test : np.ndarray
+        Test features
+    y_test : np.ndarray
+        Test labels
+
+    Returns
+    -------
+    dict
+        Model-wise results containing:
+            - accuracy
+            - training time
+            - inference time
+
+    Process
+    -------
+    For each model:
+        1. Fit on training data
+        2. Predict test data
+        3. Compute metrics
+        4. Save artifacts to disk
+
+    Purpose
+    -------
+    Provides a reproducible benchmarking suite for EEG classification.
     """
 
     logger.info("Starting model training pipeline...")
@@ -229,9 +462,6 @@ def train_all_models(X_train, y_train, X_test, y_test):
         logger.info("=" * 80)
         logger.info(f"Training model: {name}")
 
-        logger.info(f"Training data shape: {X_train.shape}")
-        logger.info(f"Testing data shape: {X_test.shape}")
-
         # ---------------------------------------------------------------------
         # TRAIN
         # ---------------------------------------------------------------------
@@ -239,9 +469,7 @@ def train_all_models(X_train, y_train, X_test, y_test):
         logger.info("Fitting model...")
 
         t0 = time.time()
-
         model.fit(X_train, y_train)
-
         train_time = time.time() - t0
 
         logger.info(f"Training completed in {train_time:.2f} seconds")
@@ -253,9 +481,7 @@ def train_all_models(X_train, y_train, X_test, y_test):
         logger.info("Running inference...")
 
         t0 = time.time()
-
         preds = model.predict(X_test)
-
         infer_time = time.time() - t0
 
         logger.info(f"Inference completed in {infer_time:.4f} seconds")
@@ -293,6 +519,29 @@ def train_all_models(X_train, y_train, X_test, y_test):
 
 
 def main():
+    """
+    Execute full EEG baseline training pipeline.
+
+    Pipeline Stages
+    --------------
+    1. Initialize logging and directories
+    2. Load raw SEED dataset
+    3. Apply preprocessing pipeline
+    4. Extract bandpower features
+    5. Perform group-aware train/test split
+    6. Train multiple classical ML models
+    7. Save benchmark summary
+
+    Output
+    ------
+    - Trained models per algorithm
+    - Per-model metrics and confusion matrices
+    - Global benchmark summary JSON
+
+    Purpose
+    -------
+    Provides a complete classical ML baseline for EEG emotion classification.
+    """
 
     logger.info("=" * 80)
     logger.info("STARTING BASELINE EEG TRAINING PIPELINE")
@@ -316,7 +565,7 @@ def main():
     # FEATURE EXTRACTION
     # -------------------------------------------------------------------------
 
-    X, y, groups = flatten_windows(processed)
+    X, y, groups = extract_dataset_features(processed)
 
     # -------------------------------------------------------------------------
     # TRAIN / TEST SPLIT
