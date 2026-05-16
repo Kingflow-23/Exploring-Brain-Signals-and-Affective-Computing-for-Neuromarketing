@@ -308,15 +308,9 @@ def main():
 
     ensure_dir()
 
-    logger.info("Loading raw SEED dataset...")
     raw = build_seed_dataset(DATASET_DIR)
 
-    logger.info(f"Raw samples loaded: {len(raw)}")
-
-    logger.info("Running preprocessing pipeline...")
     processed = preprocess_dataset(raw)
-
-    logger.info(f"Processed samples: {len(processed)}")
 
     logger.info("Building deep dataset...")
     X, y, groups = build_deep_dataset(processed)
@@ -347,7 +341,7 @@ def main():
     save_json(output_path, results)
 
     logger.info("=" * 80)
-    logger.info("DEEP TRAINING PIPELINE FINISHED")
+    logger.info("DEEP TRAINING PIPELINE FINISHED ✅")
     logger.info("=" * 80)
 
 

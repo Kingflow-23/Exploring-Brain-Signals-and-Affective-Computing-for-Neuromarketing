@@ -282,7 +282,7 @@ def train_all_models(X_train, y_train, X_test, y_test):
 
         logger.info(f"Finished model: {name}")
 
-    logger.info("All models trained successfully.")
+    logger.info("All models trained successfully. ✅")
 
     return results
 
@@ -304,21 +304,13 @@ def main():
     # LOAD DATASET
     # -------------------------------------------------------------------------
 
-    logger.info("Loading SEED dataset...")
-
     raw = build_seed_dataset(DATASET_DIR)
-
-    logger.info(f"Raw dataset samples: {len(raw)}")
 
     # -------------------------------------------------------------------------
     # PREPROCESS
     # -------------------------------------------------------------------------
 
-    logger.info("Preprocessing dataset...")
-
     processed = preprocess_dataset(raw)
-
-    logger.info(f"Processed dataset samples: {len(processed)}")
 
     # -------------------------------------------------------------------------
     # FEATURE EXTRACTION
@@ -366,7 +358,7 @@ def main():
     logger.info(f"Saved benchmark summary: {summary_path}")
 
     logger.info("=" * 80)
-    logger.info("TRAINING PIPELINE FINISHED")
+    logger.info("TRAINING PIPELINE FINISHED ✅")
     logger.info("=" * 80)
 
 
