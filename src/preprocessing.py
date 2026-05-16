@@ -176,8 +176,8 @@ def sliding_window(
 def preprocess_trial(
     signal: np.ndarray,
     normalize: bool = True,
-    window_size: int = 400,
-    step_size: int = 200,
+    window_size: int = WINDOW_SIZE,
+    step_size: int = STEP_SIZE,
 ) -> np.ndarray:
     """
     Full preprocessing pipeline for one EEG trial.
