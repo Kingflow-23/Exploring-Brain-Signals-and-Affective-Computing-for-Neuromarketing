@@ -98,6 +98,7 @@ DESIGN CHOICES
 import numpy as np
 import logging
 
+from tqdm import tqdm
 from config import WINDOW_SIZE, STEP_SIZE, LABELS_MAP
 
 logger = logging.getLogger("EEG_PREPROCESSOR")
@@ -233,7 +234,7 @@ def preprocess_dataset(dataset: list) -> list:
 
     processed = []
 
-    for idx, sample in enumerate(dataset):
+    for idx, sample in enumerate(tqdm(dataset, desc="Preprocessing EEG")):
 
         signal = sample["signal"]
 

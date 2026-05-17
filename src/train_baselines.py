@@ -9,6 +9,8 @@ import joblib
 import logging
 import numpy as np
 
+from tqdm import tqdm
+
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
@@ -154,7 +156,7 @@ def train_all_models(X_train, y_train, X_test, y_test):
     results = {}
     models = build_models()
 
-    for name, model in models.items():
+    for name, model in tqdm(models.items(), desc="Training models"):
 
         logger.info(f"Training: {name}")
 

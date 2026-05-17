@@ -46,6 +46,8 @@ FEATURE SET
 
 import logging
 import numpy as np
+
+from tqdm import tqdm
 from scipy.signal import butter, filtfilt, welch
 
 logger = logging.getLogger("EEG_FEATURES")
@@ -302,7 +304,7 @@ def extract_dataset_features(processed_dataset):
 
     X, y, groups = [], [], []
 
-    for sample in processed_dataset:
+    for sample in tqdm(processed_dataset, desc="EEG feature extraction"):
         label = sample["label"]
         subject = sample["subject"]
 
