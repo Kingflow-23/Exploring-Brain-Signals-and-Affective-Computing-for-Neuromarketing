@@ -47,7 +47,6 @@ FEATURE SET
 import logging
 import numpy as np
 
-from tqdm import tqdm
 from scipy.signal import butter, filtfilt, welch
 
 logger = logging.getLogger("EEG_FEATURES")
@@ -226,7 +225,7 @@ def compute_psd(signal: np.ndarray) -> np.ndarray:
             ]
         )
 
-    return np.asarray(per_channel, dtype=np.float32).flatten()
+    return np.mean(per_channel, axis=0).astype(np.float32)
 
 
 def compute_bandpower(window: np.ndarray) -> np.ndarray:
@@ -304,7 +303,7 @@ def extract_dataset_features(processed_dataset):
 
     X, y, groups = [], [], []
 
-    for sample in tqdm(processed_dataset, desc="EEG feature extraction"):
+    for sample in processed_dataset:
         label = sample["label"]
         subject = sample["subject"]
 
