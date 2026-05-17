@@ -1,5 +1,5 @@
 # =============================================================================
-# DEEP LEARNING EEG TRAINING PIPELINE (SOTA MODELS)
+# EEG DEEP LEARNING FRAMEWORK (PRODUCTION-GRADE)
 # =============================================================================
 
 import os
@@ -10,289 +10,267 @@ import numpy as np
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+
+from tqdm.auto import tqdm
+
+from torch.utils.data import Dataset, DataLoader
 
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.metrics import accuracy_score
 
+from braindecode.models import EEGNetv4, Deep4Net
+
 from seed_loader import build_seed_dataset
 from preprocessing import preprocess_dataset
 from config import DATASET_DIR, MODEL_DIR, RANDOM_STATE, TEST_SIZE
-
-from braindecode.models import EEGNetv4, Deep4Net
 
 # =============================================================================
 # LOGGING
 # =============================================================================
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 
-logger = logging.getLogger("DEEP_TRAINER")
+logger = logging.getLogger("EEG_TRAINER")
 
 
 # =============================================================================
-# UTILITIES
+# REPRODUCIBILITY
 # =============================================================================
 
 
-def ensure_dir():
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    logger.info(f"Model directory ready: {MODEL_DIR}")
+def seed_everything(seed=42):
+    import random
+    import torch
+    import numpy as np
 
-
-def save_json(path, obj):
-    with open(path, "w") as f:
-        json.dump(obj, f, indent=4)
-
-    logger.info(f"Saved JSON: {path}")
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 
 # =============================================================================
-# DATA PREPARATION (NO FLATTENING)
+# DATASET
+# =============================================================================
+
+
+class EEGDataset(Dataset):
+    """
+    EEG Window Dataset (PyTorch-ready)
+
+    Each sample:
+        X: (1, 62, T)
+        y: scalar label
+        group: subject id (for analysis only)
+    """
+
+    def __init__(self, X, y, groups=None):
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.y = torch.tensor(y, dtype=torch.long)
+        self.groups = groups
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
+
+
+# =============================================================================
+# DATA PREPARATION
 # =============================================================================
 
 
 def build_deep_dataset(processed):
     """
-    Keeps EEG spatial + temporal structure.
+    Convert processed SEED dataset into DL tensors.
 
     Output:
-        X: (N, 1, 62, W)
+        X: (N, 1, 62, T)
         y: (N,)
-        groups: (N,)
+        groups: subject ids
     """
 
-    logger.info("Building deep learning dataset...")
+    logger.info("Building deep dataset...")
 
     X, y, g = [], [], []
 
-    total_windows = 0
-
-    for sample_idx, sample in enumerate(processed):
-
+    for sample in processed:
         windows = sample["windows"]
         label = sample["label"]
         subject = sample["subject"]
 
-        logger.info(
-            f"Sample {sample_idx+1}/{len(processed)} | "
-            f"subject={subject} | "
-            f"label={label} | "
-            f"windows={len(windows)}"
-        )
-
         for w in windows:
-            X.append(w[np.newaxis, :, :])  # (1, 62, W)
+            X.append(w[np.newaxis, :, :])  # (1, 62, T)
             y.append(label)
             g.append(subject)
-
-        total_windows += len(windows)
 
     X = np.asarray(X, dtype=np.float32)
     y = np.asarray(y, dtype=np.int64)
     g = np.asarray(g, dtype=np.int64)
 
-    logger.info(f"Deep dataset created")
+    # =============================================================================
+    # NORMALIZATION (CRITICAL FOR EEG DL)
+    # =============================================================================
+    X = (X - X.mean(axis=-1, keepdims=True)) / (X.std(axis=-1, keepdims=True) + 1e-8)
+
     logger.info(f"X shape: {X.shape}")
     logger.info(f"y shape: {y.shape}")
-    logger.info(f"groups shape: {g.shape}")
-    logger.info(f"Total windows: {total_windows}")
 
     return X, y, g
 
 
 # =============================================================================
-# MODEL TRAINING CORE
-# =============================================================================
-
-
-def train_model(
-    model, model_name, X_train, y_train, X_test, y_test, epochs=10, batch_size=64
-):
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    logger.info("=" * 80)
-    logger.info(f"TRAINING MODEL: {model_name}")
-    logger.info(f"Using device: {device}")
-
-    model.to(device)
-
-    logger.info(f"Train samples: {len(X_train)}")
-    logger.info(f"Test samples: {len(X_test)}")
-    logger.info(f"Batch size: {batch_size}")
-    logger.info(f"Epochs: {epochs}")
-
-    dataset = TensorDataset(
-        torch.tensor(X_train, dtype=torch.float32),
-        torch.tensor(y_train, dtype=torch.long),
-    )
-
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
-    logger.info(f"Number of batches per epoch: {len(loader)}")
-
-    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-    loss_fn = nn.CrossEntropyLoss()
-
-    # =========================================================================
-    # TRAINING
-    # =========================================================================
-
-    logger.info("Starting training loop...")
-
-    model.train()
-
-    train_start = time.time()
-
-    for ep in range(epochs):
-
-        epoch_start = time.time()
-
-        total_loss = 0.0
-
-        for batch_idx, (xb, yb) in enumerate(loader):
-
-            xb = xb.to(device)
-            yb = yb.to(device)
-
-            opt.zero_grad()
-
-            out = model(xb)
-
-            loss = loss_fn(out, yb)
-
-            loss.backward()
-
-            opt.step()
-
-            total_loss += loss.item()
-
-            # batch logging
-            if (batch_idx + 1) % 10 == 0 or batch_idx == 0:
-                logger.info(
-                    f"[{model_name}] "
-                    f"epoch={ep+1}/{epochs} | "
-                    f"batch={batch_idx+1}/{len(loader)} | "
-                    f"loss={loss.item():.6f}"
-                )
-
-        epoch_time = time.time() - epoch_start
-        avg_loss = total_loss / len(loader)
-
-        logger.info(
-            f"[{model_name}] "
-            f"epoch={ep+1}/{epochs} COMPLETE | "
-            f"avg_loss={avg_loss:.6f} | "
-            f"time={epoch_time:.2f}s"
-        )
-
-    train_time = time.time() - train_start
-
-    logger.info(f"Training completed in {train_time:.2f}s")
-
-    # =========================================================================
-    # EVALUATION
-    # =========================================================================
-
-    logger.info(f"Evaluating model: {model_name}")
-
-    model.eval()
-
-    eval_start = time.time()
-
-    with torch.no_grad():
-
-        xb = torch.tensor(X_test, dtype=torch.float32).to(device)
-
-        logits = model(xb)
-
-        preds = logits.argmax(dim=1).cpu().numpy()
-
-    eval_time = time.time() - eval_start
-
-    acc = accuracy_score(y_test, preds)
-
-    logger.info(f"{model_name} evaluation completed")
-    logger.info(f"{model_name} accuracy: {acc:.4f}")
-    logger.info(f"{model_name} inference time: {eval_time:.2f}s")
-
-    return {
-        "accuracy": float(acc),
-        "train_time": float(train_time),
-        "inference_time": float(eval_time),
-    }
-
-
-# =============================================================================
-# MODELS (SOTA EEG)
+# MODEL FACTORY
 # =============================================================================
 
 
 def build_models(n_chans=62, n_classes=3, window_size=400):
+    """
+    Factory for EEG deep models.
+    """
 
-    logger.info("Building deep learning models...")
+    logger.info("Building EEG deep models...")
 
-    models = {
+    return {
         "eegnet": EEGNetv4(
             n_chans=n_chans,
             n_outputs=n_classes,
             input_window_samples=window_size,
             final_conv_length="auto",
         ),
-        "deepconvnet": Deep4Net(
+        "deep4net": Deep4Net(
             n_chans=n_chans,
             n_outputs=n_classes,
             input_window_samples=window_size,
         ),
     }
 
-    logger.info(f"Built {len(models)} deep models")
-
-    for name in models.keys():
-        logger.info(f"Registered model: {name}")
-
-    return models
-
 
 # =============================================================================
-# TRAIN LOOP
+# TRAINER
 # =============================================================================
 
 
-def train_all(X_train, y_train, X_test, y_test):
+class Trainer:
+    def __init__(self, model, device):
+        self.model = model.to(device)
+        self.device = device
 
-    logger.info("=" * 80)
-    logger.info("STARTING DEEP LEARNING BENCHMARK")
-    logger.info("=" * 80)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        self.criterion = nn.CrossEntropyLoss()
 
-    results = {}
+    def train_epoch(self, loader):
+        self.model.train()
 
-    models = build_models(window_size=X_train.shape[-1])
+        total_loss = 0
+        correct = 0
+        total = 0
 
-    for name, model in models.items():
+        pbar = tqdm(loader, desc="Training", leave=False)
 
-        logger.info(f"Launching training for: {name}")
+        for xb, yb in pbar:
+            xb = xb.to(self.device, non_blocking=True)
+            yb = yb.to(self.device, non_blocking=True)
 
-        metrics = train_model(
-            model=model,
-            model_name=name,
-            X_train=X_train,
-            y_train=y_train,
-            X_test=X_test,
-            y_test=y_test,
+            self.optimizer.zero_grad()
+
+            out = self.model(xb)
+            loss = self.criterion(out, yb)
+
+            loss.backward()
+            self.optimizer.step()
+
+            total_loss += loss.item()
+
+            preds = out.argmax(dim=1)
+            correct += (preds == yb).sum().item()
+            total += yb.size(0)
+
+            pbar.set_postfix(
+                {"loss": f"{loss.item():.4f}", "acc": f"{correct/total:.3f}"}
+            )
+
+        return total_loss / len(loader), correct / total
+
+    def evaluate(self, loader):
+        self.model.eval()
+
+        preds, targets = [], []
+
+        with torch.no_grad():
+            for xb, yb in loader:
+                xb = xb.to(self.device, non_blocking=True)
+
+                out = self.model(xb)
+                pred = out.argmax(dim=1).cpu().numpy()
+
+                preds.extend(pred)
+                targets.extend(yb.numpy())
+
+        acc = accuracy_score(targets, preds)
+        return acc
+
+
+# =============================================================================
+# TRAIN PIPELINE
+# =============================================================================
+
+
+def run_training(
+    model,
+    train_loader,
+    val_loader,
+    test_loader,
+    epochs=10,
+    name="model",
+    experiment_dir="deep_experiment",
+):
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model_path = os.path.join(experiment_dir, f"{name}_best.pt")
+
+    trainer = Trainer(model, device)
+
+    logger.info(f"Training on device: {device}")
+
+    history = {"train_loss": [], "train_acc": [], "val_acc": []}
+
+    best_acc = 0
+
+    for epoch in range(epochs):
+
+        t0 = time.time()
+
+        train_loss, train_acc = trainer.train_epoch(train_loader)
+        val_acc = trainer.evaluate(val_loader)
+
+        history["train_loss"].append(train_loss)
+        history["train_acc"].append(train_acc)
+        history["val_acc"].append(val_acc)
+
+        if val_acc > best_acc:
+            best_acc = val_acc
+            torch.save(model.state_dict(), model_path)
+
+        epoch_time = time.time() - t0
+        remaining = epoch_time * (epochs - epoch - 1)
+
+        logger.info(
+            f"Epoch {epoch+1}/{epochs} | "
+            f"loss={train_loss:.4f} | "
+            f"train_acc={train_acc:.4f} | "
+            f"val_acc={val_acc:.4f} | "
+            f"eta={remaining/60:.1f}m"
         )
 
-        results[name] = metrics
+    test_acc = trainer.evaluate(test_loader)
 
-        logger.info(f"{name} finished successfully")
-        logger.info(f"{name} metrics: {metrics}")
-
-    logger.info("All deep models completed")
-
-    return results
+    return {"best_val_acc": best_acc, "test_acc": test_acc, "history": history}
 
 
 # =============================================================================
@@ -302,47 +280,93 @@ def train_all(X_train, y_train, X_test, y_test):
 
 def main():
 
-    logger.info("=" * 80)
-    logger.info("DEEP EEG TRAINING PIPELINE STARTED")
-    logger.info("=" * 80)
+    seed_everything(RANDOM_STATE)
 
-    ensure_dir()
+    os.makedirs(MODEL_DIR, exist_ok=True)
+
+    experiment_dir = os.path.join(MODEL_DIR, "deep_experiment")
+    os.makedirs(experiment_dir, exist_ok=True)
+
+    # --------------------------------------------------
+    # DATA
+    # --------------------------------------------------
 
     raw = build_seed_dataset(DATASET_DIR)
-
     processed = preprocess_dataset(raw)
 
-    logger.info("Building deep dataset...")
     X, y, groups = build_deep_dataset(processed)
 
-    logger.info("Performing subject-wise split...")
+    # --------------------------------------------------
+    # SPLIT (SUBJECT-AWARE)
+    # --------------------------------------------------
 
     splitter = GroupShuffleSplit(
         n_splits=1, test_size=TEST_SIZE, random_state=RANDOM_STATE
     )
 
-    train_idx, test_idx = next(splitter.split(X, y, groups))
+    train_idx, temp_idx = next(splitter.split(X, y, groups))
 
-    X_train = X[train_idx]
-    X_test = X[test_idx]
+    X_train, y_train = X[train_idx], y[train_idx]
+    X_temp, y_temp = X[temp_idx], y[temp_idx]
+    g_temp = groups[temp_idx]
 
-    y_train = y[train_idx]
-    y_test = y[test_idx]
+    splitter2 = GroupShuffleSplit(n_splits=1, test_size=0.5, random_state=RANDOM_STATE)
 
-    logger.info(f"Train shape: {X_train.shape}")
-    logger.info(f"Test shape: {X_test.shape}")
+    val_idx, test_idx = next(splitter2.split(X_temp, y_temp, g_temp))
 
-    logger.info("Starting benchmark training...")
+    X_val, y_val = X_temp[val_idx], y_temp[val_idx]
+    X_test, y_test = X_temp[test_idx], y_temp[test_idx]
 
-    results = train_all(X_train, y_train, X_test, y_test)
+    # --------------------------------------------------
+    # DATALOADERS
+    # --------------------------------------------------
 
-    output_path = os.path.join(MODEL_DIR, "deep_benchmark.json")
+    train_loader = DataLoader(
+        EEGDataset(X_train, y_train), batch_size=64, shuffle=True, pin_memory=True
+    )
+    val_loader = DataLoader(
+        EEGDataset(X_val, y_val), batch_size=64, shuffle=False, pin_memory=True
+    )
+    test_loader = DataLoader(
+        EEGDataset(X_test, y_test), batch_size=64, shuffle=False, pin_memory=True
+    )
 
-    save_json(output_path, results)
+    # --------------------------------------------------
+    # MODELS
+    # --------------------------------------------------
 
-    logger.info("=" * 80)
-    logger.info("DEEP TRAINING PIPELINE FINISHED ✅")
-    logger.info("=" * 80)
+    models = build_models(window_size=X.shape[-1])
+
+    results = {}
+
+    for name, model in models.items():
+
+        logger.info(f"\n{'='*80}")
+        logger.info(f"TRAINING MODEL: {name}")
+        logger.info(f"{'='*80}")
+
+        metrics = run_training(
+            model,
+            train_loader,
+            val_loader,
+            test_loader,
+            epochs=10,
+            experiment_dir=experiment_dir,
+            name=name,
+        )
+
+        results[name] = metrics
+
+        logger.info(f"{name} done → {metrics}")
+
+    # --------------------------------------------------
+    # SAVE RESULTS
+    # --------------------------------------------------
+
+    with open(os.path.join(MODEL_DIR, "deep_results.json"), "w") as f:
+        json.dump(results, f, indent=4)
+
+    logger.info("Training complete ✅")
 
 
 if __name__ == "__main__":
