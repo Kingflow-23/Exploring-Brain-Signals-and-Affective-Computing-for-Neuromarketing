@@ -68,7 +68,7 @@ def extract_dataset_features(processed_dataset):
 
     X, y, groups = [], [], []
 
-    for sample in processed_dataset:
+    for sample in tqdm(processed_dataset, desc="Feature extraction"):
 
         label = sample["label"]
         subject = sample["subject"]
