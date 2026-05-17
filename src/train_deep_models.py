@@ -18,7 +18,7 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.metrics import accuracy_score
 
-from braindecode.models import EEGNetv4, Deep4Net
+from braindecode.models import EEGNetv4, Deep4Net, ShallowFBCSPNet, EEGInception
 
 from seed_loader import build_seed_dataset
 from preprocessing import preprocess_dataset
@@ -130,24 +130,82 @@ def build_deep_dataset(processed):
 
 def build_models(n_chans=62, n_classes=3, window_size=400):
     """
-    Factory for EEG deep models.
+    EEG deep learning model factory.
+
+    This includes 4 complementary architectures:
+
+    1. EEGNetv4
+        - Lightweight CNN
+        - Strong baseline for EEG classification
+
+    2. Deep4Net
+        - Deeper CNN architecture
+        - Learns hierarchical spatio-temporal EEG features
+
+    3. ShallowConvNet (ShallowFBCSPNet)
+        - Spectral/log-variance model
+        - Strong inductive bias for band-power EEG signals
+
+    4. EEGInception
+        - Multi-scale temporal convolution model
+        - Captures EEG rhythms across different frequency bands
+
+    Returns:
+        dict[str, torch.nn.Module]
     """
 
-    logger.info("Building EEG deep models...")
+    logger.info("Building EEG deep models (benchmark suite)...")
 
-    return {
-        "eegnet": EEGNetv4(
-            n_chans=n_chans,
-            n_outputs=n_classes,
-            input_window_samples=window_size,
-            final_conv_length="auto",
-        ),
-        "deep4net": Deep4Net(
-            n_chans=n_chans,
-            n_outputs=n_classes,
-            input_window_samples=window_size,
-        ),
-    }
+    models = {}
+
+    # --------------------------------------------------
+    # 1. EEGNetv4 (compact baseline)
+    # --------------------------------------------------
+    models["eegnet"] = EEGNetv4(
+        n_chans=n_chans,
+        n_outputs=n_classes,
+        input_window_samples=window_size,
+        final_conv_length="auto",
+        drop_prob=0.5,
+    )
+
+    # --------------------------------------------------
+    # 2. Deep4Net (deeper CNN)
+    # --------------------------------------------------
+    models["deep4net"] = Deep4Net(
+        n_chans=n_chans,
+        n_outputs=n_classes,
+        input_window_samples=window_size,
+        final_conv_length="auto",
+    )
+
+    # --------------------------------------------------
+    # 3. ShallowConvNet (VERY important EEG baseline)
+    # --------------------------------------------------
+    models["shallowconv"] = ShallowFBCSPNet(
+        n_chans=n_chans,
+        n_outputs=n_classes,
+        input_window_samples=window_size,
+        final_conv_length="auto",
+        pool_time_length=25,
+        pool_time_stride=5,
+    )
+
+    # --------------------------------------------------
+    # 4. EEGInception (multi-scale temporal model)
+    # --------------------------------------------------
+    models["eeginception"] = EEGInception(
+        n_chans=n_chans,
+        n_outputs=n_classes,
+        input_window_samples=window_size,
+        n_filters_time=8,
+        filter_time_length=64,
+        pool_time_length=8,
+        pool_time_stride=4,
+        drop_prob=0.5,
+    )
+
+    return models
 
 
 # =============================================================================
@@ -160,7 +218,9 @@ class Trainer:
         self.model = model.to(device)
         self.device = device
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=1e-3, weight_decay=1e-4
+        )
         self.criterion = nn.CrossEntropyLoss()
 
     def train_epoch(self, loader):
@@ -350,7 +410,7 @@ def main():
             train_loader,
             val_loader,
             test_loader,
-            epochs=10,
+            epochs=20,
             experiment_dir=experiment_dir,
             name=name,
         )
