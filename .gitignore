@@ -15,3 +15,8 @@ notebooks/*
 
 # models
 *.pkl
+
+# environment
+.env
+.vscode/
+venv/
