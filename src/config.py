@@ -41,8 +41,8 @@ EEG_KEY_PATTERN = "_eeg"
 # PREPROCESSING CONFIG
 # =============================================================================
 
-WINDOW_SIZE = 128
-STEP_SIZE = 128
+WINDOW_SIZE = 400
+STEP_SIZE = 200
 
 # =============================================================================
 # LLM CONFIGURATION
@@ -61,3 +61,9 @@ LABELS_MAP = {-1: 0, 0: 1, 1: 2}  # Map SEED labels to indices for classificatio
 
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
+
+# =============================================================================
+# MODEL TRAINING CONFIG
+# =============================================================================
+BATCH_SIZE = 64
+N_EPOCHS = 50
