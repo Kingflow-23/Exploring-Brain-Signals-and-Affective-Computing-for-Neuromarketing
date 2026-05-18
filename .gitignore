@@ -15,6 +15,7 @@ notebooks/*
 
 # models
 *.pkl
+model/deep_experiment/*
 
 # environment
 .env

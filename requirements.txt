@@ -1,10 +1,6 @@
-mne
 torch
 scipy
 numpy
 pandas
 sklearn
-keras
-pickle
-tensorflow
 braindecode
