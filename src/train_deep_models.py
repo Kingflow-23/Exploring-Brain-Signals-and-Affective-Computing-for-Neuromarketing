@@ -6,6 +6,7 @@ import os
 import time
 import json
 import logging
+import random
 import numpy as np
 
 import torch
@@ -18,11 +19,11 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.metrics import accuracy_score
 
-from braindecode.models import EEGNetv4, Deep4Net, ShallowFBCSPNet, EEGInception
+from braindecode.models import EEGNet, Deep4Net, ShallowFBCSPNet
 
 from seed_loader import build_seed_dataset
 from preprocessing import preprocess_dataset
-from config import DATASET_DIR, MODEL_DIR, RANDOM_STATE, TEST_SIZE
+from config import DATASET_DIR, MODEL_DIR, RANDOM_STATE, TEST_SIZE, WINDOW_SIZE
 
 # =============================================================================
 # LOGGING
@@ -42,14 +43,12 @@ logger = logging.getLogger("EEG_TRAINER")
 
 
 def seed_everything(seed=42):
-    import random
-    import torch
-    import numpy as np
-
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 # =============================================================================
@@ -104,7 +103,7 @@ def build_deep_dataset(processed):
         subject = sample["subject"]
 
         for w in windows:
-            X.append(w[np.newaxis, :, :])  # (1, 62, T)
+            X.append(w)
             y.append(label)
             g.append(subject)
 
@@ -128,13 +127,13 @@ def build_deep_dataset(processed):
 # =============================================================================
 
 
-def build_models(n_chans=62, n_classes=3, window_size=400):
+def build_models(n_chans=62, n_classes=3, window_size=WINDOW_SIZE, sfreq=200):
     """
     EEG deep learning model factory.
 
-    This includes 4 complementary architectures:
+    This includes 3 complementary architectures:
 
-    1. EEGNetv4
+    1. EEGNet
         - Lightweight CNN
         - Strong baseline for EEG classification
 
@@ -146,10 +145,6 @@ def build_models(n_chans=62, n_classes=3, window_size=400):
         - Spectral/log-variance model
         - Strong inductive bias for band-power EEG signals
 
-    4. EEGInception
-        - Multi-scale temporal convolution model
-        - Captures EEG rhythms across different frequency bands
-
     Returns:
         dict[str, torch.nn.Module]
     """
@@ -159,50 +154,44 @@ def build_models(n_chans=62, n_classes=3, window_size=400):
     models = {}
 
     # --------------------------------------------------
-    # 1. EEGNetv4 (compact baseline)
+    # Derived temporal info (CRITICAL FIX)
     # --------------------------------------------------
-    models["eegnet"] = EEGNetv4(
+    input_window_seconds = window_size / sfreq
+
+    # --------------------------------------------------
+    # 1. EEGNet
+    # --------------------------------------------------
+    models["eegnet"] = EEGNet(
         n_chans=n_chans,
         n_outputs=n_classes,
-        input_window_samples=window_size,
+        input_window_seconds=input_window_seconds,
+        sfreq=sfreq,
         final_conv_length="auto",
         drop_prob=0.5,
     )
 
     # --------------------------------------------------
-    # 2. Deep4Net (deeper CNN)
+    # 2. Deep4Net
     # --------------------------------------------------
     models["deep4net"] = Deep4Net(
         n_chans=n_chans,
         n_outputs=n_classes,
-        input_window_samples=window_size,
+        input_window_seconds=input_window_seconds,
+        sfreq=sfreq,
         final_conv_length="auto",
     )
 
     # --------------------------------------------------
-    # 3. ShallowConvNet (VERY important EEG baseline)
+    # 3. Shallow ConvNet (strong EEG baseline)
     # --------------------------------------------------
     models["shallowconv"] = ShallowFBCSPNet(
         n_chans=n_chans,
         n_outputs=n_classes,
-        input_window_samples=window_size,
+        input_window_seconds=input_window_seconds,
+        sfreq=sfreq,
         final_conv_length="auto",
         pool_time_length=25,
         pool_time_stride=5,
-    )
-
-    # --------------------------------------------------
-    # 4. EEGInception (multi-scale temporal model)
-    # --------------------------------------------------
-    models["eeginception"] = EEGInception(
-        n_chans=n_chans,
-        n_outputs=n_classes,
-        input_window_samples=window_size,
-        n_filters_time=8,
-        filter_time_length=64,
-        pool_time_length=8,
-        pool_time_stride=4,
-        drop_prob=0.5,
     )
 
     return models
@@ -256,23 +245,24 @@ class Trainer:
 
         return total_loss / len(loader), correct / total
 
-    def evaluate(self, loader):
+    def evaluate(self, loader, desc="Evaluating"):
         self.model.eval()
 
         preds, targets = [], []
 
         with torch.no_grad():
-            for xb, yb in loader:
+            for xb, yb in tqdm(loader, desc=desc, leave=False):
+
                 xb = xb.to(self.device, non_blocking=True)
+                yb = yb.to(self.device, non_blocking=True)
 
                 out = self.model(xb)
-                pred = out.argmax(dim=1).cpu().numpy()
+                pred = out.argmax(dim=1)
 
-                preds.extend(pred)
-                targets.extend(yb.numpy())
+                preds.extend(pred.cpu().numpy())
+                targets.extend(yb.cpu().numpy())
 
-        acc = accuracy_score(targets, preds)
-        return acc
+        return accuracy_score(targets, preds)
 
 
 # =============================================================================
@@ -307,7 +297,7 @@ def run_training(
         t0 = time.time()
 
         train_loss, train_acc = trainer.train_epoch(train_loader)
-        val_acc = trainer.evaluate(val_loader)
+        val_acc = trainer.evaluate(val_loader, desc="Validation")
 
         history["train_loss"].append(train_loss)
         history["train_acc"].append(train_acc)
@@ -328,7 +318,7 @@ def run_training(
             f"eta={remaining/60:.1f}m"
         )
 
-    test_acc = trainer.evaluate(test_loader)
+    test_acc = trainer.evaluate(test_loader, desc="Test")
 
     return {"best_val_acc": best_acc, "test_acc": test_acc, "history": history}
 
@@ -399,7 +389,7 @@ def main():
 
     results = {}
 
-    for name, model in models.items():
+    for name, model in tqdm(models.items(), desc="Training models"):
 
         logger.info(f"\n{'='*80}")
         logger.info(f"TRAINING MODEL: {name}")
