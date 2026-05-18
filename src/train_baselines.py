@@ -17,9 +17,8 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from sklearn.svm import LinearSVC
+from sklearn.linear_model import SGDClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 
 from seed_loader import build_seed_dataset
@@ -108,23 +107,20 @@ def build_models():
                 ),
             ]
         ),
-        "linear_svc": Pipeline(
+        "sgd_svm": Pipeline(
             [
                 ("scaler", StandardScaler()),
                 (
                     "clf",
-                    LinearSVC(
+                    SGDClassifier(
+                        loss="log_loss",
+                        alpha=1e-4,
+                        max_iter=2000,
+                        tol=1e-3,
                         class_weight="balanced",
                         random_state=RANDOM_STATE,
-                        max_iter=5000,
                     ),
                 ),
-            ]
-        ),
-        "knn": Pipeline(
-            [
-                ("scaler", StandardScaler()),
-                ("clf", KNeighborsClassifier(n_neighbors=7, weights="distance")),
             ]
         ),
         "random_forest": Pipeline(
@@ -132,9 +128,9 @@ def build_models():
                 (
                     "clf",
                     RandomForestClassifier(
-                        n_estimators=200,
-                        max_depth=25,
-                        min_samples_leaf=2,
+                        n_estimators=100,
+                        max_depth=15,
+                        min_samples_leaf=5,
                         n_jobs=-1,
                         random_state=RANDOM_STATE,
                     ),
@@ -156,7 +152,7 @@ def train_all_models(X_train, y_train, X_test, y_test):
     results = {}
     models = build_models()
 
-    for name, model in tqdm(models.items(), desc="Training models"):
+    for name, model in tqdm(models.items(), desc="Training models", unit="model"):
 
         logger.info(f"Training: {name}")
 
