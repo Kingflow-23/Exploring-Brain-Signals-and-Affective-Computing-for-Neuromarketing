@@ -17,9 +17,11 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
 from sklearn.linear_model import SGDClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 
 from seed_loader import build_seed_dataset
 from preprocessing import preprocess_dataset
@@ -93,13 +95,16 @@ def extract_dataset_features(processed_dataset):
 
 def build_models():
     return {
+        # -----------------------
+        # LINEAR MODELS (SCALED)
+        # -----------------------
         "logistic_regression": Pipeline(
             [
                 ("scaler", StandardScaler()),
                 (
                     "clf",
                     LogisticRegression(
-                        max_iter=1000,
+                        max_iter=2000,
                         class_weight="balanced",
                         random_state=RANDOM_STATE,
                         solver="saga",
@@ -107,7 +112,7 @@ def build_models():
                 ),
             ]
         ),
-        "sgd_svm": Pipeline(
+        "sgd_clf": Pipeline(
             [
                 ("scaler", StandardScaler()),
                 (
@@ -115,7 +120,7 @@ def build_models():
                     SGDClassifier(
                         loss="log_loss",
                         alpha=1e-4,
-                        max_iter=2000,
+                        max_iter=3000,
                         tol=1e-3,
                         class_weight="balanced",
                         random_state=RANDOM_STATE,
@@ -123,19 +128,46 @@ def build_models():
                 ),
             ]
         ),
-        "random_forest": Pipeline(
-            [
-                (
-                    "clf",
-                    RandomForestClassifier(
-                        n_estimators=100,
-                        max_depth=15,
-                        min_samples_leaf=5,
-                        n_jobs=-1,
-                        random_state=RANDOM_STATE,
-                    ),
-                ),
-            ]
+        # -----------------------
+        # TREE MODELS (NO SCALING)
+        # -----------------------
+        "random_forest": RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=2,
+            n_jobs=-1,
+            random_state=RANDOM_STATE,
+        ),
+        "extra_trees": ExtraTreesClassifier(
+            n_estimators=500,
+            max_depth=None,
+            min_samples_split=2,
+            n_jobs=-1,
+            random_state=RANDOM_STATE,
+        ),
+        # -----------------------
+        # BOOSTING MODELS
+        # -----------------------
+        "xgboost": XGBClassifier(
+            n_estimators=800,
+            max_depth=6,
+            learning_rate=0.03,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            min_child_weight=1,
+            reg_lambda=1.0,
+            tree_method="hist",
+            eval_metric="mlogloss",
+            random_state=RANDOM_STATE,
+        ),
+        "lightgbm": LGBMClassifier(
+            n_estimators=800,
+            learning_rate=0.03,
+            num_leaves=63,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            min_child_samples=20,
+            random_state=RANDOM_STATE,
         ),
     }
 
