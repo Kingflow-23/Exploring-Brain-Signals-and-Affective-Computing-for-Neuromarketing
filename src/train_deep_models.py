@@ -23,7 +23,15 @@ from braindecode.models import EEGNet, Deep4Net, ShallowFBCSPNet
 
 from seed_loader import build_seed_dataset
 from preprocessing import preprocess_dataset
-from config import DATASET_DIR, MODEL_DIR, RANDOM_STATE, TEST_SIZE, WINDOW_SIZE
+from config import (
+    DATASET_DIR,
+    MODEL_DIR,
+    RANDOM_STATE,
+    TEST_SIZE,
+    WINDOW_SIZE,
+    BATCH_SIZE,
+    N_EPOCHS,
+)
 
 # =============================================================================
 # LOGGING
@@ -110,11 +118,6 @@ def build_deep_dataset(processed):
     X = np.asarray(X, dtype=np.float32)
     y = np.asarray(y, dtype=np.int64)
     g = np.asarray(g, dtype=np.int64)
-
-    # =============================================================================
-    # NORMALIZATION (CRITICAL FOR EEG DL)
-    # =============================================================================
-    X = (X - X.mean(axis=-1, keepdims=True)) / (X.std(axis=-1, keepdims=True) + 1e-8)
 
     logger.info(f"X shape: {X.shape}")
     logger.info(f"y shape: {y.shape}")
@@ -211,6 +214,12 @@ class Trainer:
             self.model.parameters(), lr=1e-3, weight_decay=1e-4
         )
         self.criterion = nn.CrossEntropyLoss()
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode="max",
+            factor=0.5,
+            patience=5,
+        )
 
     def train_epoch(self, loader):
         self.model.train()
@@ -284,6 +293,9 @@ def run_training(
 
     model_path = os.path.join(experiment_dir, f"{name}_best.pt")
 
+    patience = 5
+    epochs_no_improve = 0
+
     trainer = Trainer(model, device)
 
     logger.info(f"Training on device: {device}")
@@ -298,6 +310,7 @@ def run_training(
 
         train_loss, train_acc = trainer.train_epoch(train_loader)
         val_acc = trainer.evaluate(val_loader, desc="Validation")
+        trainer.scheduler.step(val_acc)
 
         history["train_loss"].append(train_loss)
         history["train_acc"].append(train_acc)
@@ -305,19 +318,30 @@ def run_training(
 
         if val_acc > best_acc:
             best_acc = val_acc
+            epochs_no_improve = 0
             torch.save(model.state_dict(), model_path)
+        else:
+            epochs_no_improve += 1
+
+        if epochs_no_improve >= patience:
+            logger.info("Early stopping triggered.")
+            break
 
         epoch_time = time.time() - t0
         remaining = epoch_time * (epochs - epoch - 1)
+
+        current_lr = trainer.optimizer.param_groups[0]["lr"]
 
         logger.info(
             f"Epoch {epoch+1}/{epochs} | "
             f"loss={train_loss:.4f} | "
             f"train_acc={train_acc:.4f} | "
             f"val_acc={val_acc:.4f} | "
+            f"lr={current_lr:.2e} | "
             f"eta={remaining/60:.1f}m"
         )
 
+    model.load_state_dict(torch.load(model_path))
     test_acc = trainer.evaluate(test_loader, desc="Test")
 
     return {"best_val_acc": best_acc, "test_acc": test_acc, "history": history}
@@ -372,13 +396,28 @@ def main():
     # --------------------------------------------------
 
     train_loader = DataLoader(
-        EEGDataset(X_train, y_train), batch_size=64, shuffle=True, pin_memory=True
+        EEGDataset(X_train, y_train),
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        pin_memory=torch.cuda.is_available(),
+        num_workers=4,
+        persistent_workers=True,
     )
     val_loader = DataLoader(
-        EEGDataset(X_val, y_val), batch_size=64, shuffle=False, pin_memory=True
+        EEGDataset(X_val, y_val),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        pin_memory=torch.cuda.is_available(),
+        num_workers=4,
+        persistent_workers=True,
     )
     test_loader = DataLoader(
-        EEGDataset(X_test, y_test), batch_size=64, shuffle=False, pin_memory=True
+        EEGDataset(X_test, y_test),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        pin_memory=torch.cuda.is_available(),
+        num_workers=4,
+        persistent_workers=True,
     )
 
     # --------------------------------------------------
@@ -400,7 +439,7 @@ def main():
             train_loader,
             val_loader,
             test_loader,
-            epochs=20,
+            epochs=N_EPOCHS,
             experiment_dir=experiment_dir,
             name=name,
         )
