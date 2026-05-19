@@ -18,7 +18,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
 from sklearn.linear_model import SGDClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
@@ -160,15 +159,6 @@ def build_models():
             eval_metric="mlogloss",
             random_state=RANDOM_STATE,
         ),
-        "lightgbm": LGBMClassifier(
-            n_estimators=800,
-            learning_rate=0.03,
-            num_leaves=63,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            min_child_samples=20,
-            random_state=RANDOM_STATE,
-        ),
     }
 
 
@@ -197,11 +187,25 @@ def train_all_models(X_train, y_train, X_test, y_test):
         infer_time = time.time() - t0
 
         acc = accuracy_score(y_test, preds)
+        report_text = classification_report(
+            y_test,
+            preds,
+            zero_division=0,
+        )
+
+        report_dict = classification_report(
+            y_test,
+            preds,
+            output_dict=True,
+            zero_division=0,
+        )
 
         logger.info(f"{name} acc: {acc:.4f}")
+        logger.info("\n" + report_text)
 
         results[name] = {
             "accuracy": float(acc),
+            "classification_report": report_dict,
             "train_time": float(train_time),
             "inference_time": float(infer_time),
         }
@@ -253,7 +257,7 @@ def main():
     with open(os.path.join(MODEL_DIR, "benchmark_summary.json"), "w") as f:
         json.dump(results, f, indent=4)
 
-    logger.info("Done.")
+    logger.info("Done. ✅")
 
 
 if __name__ == "__main__":
