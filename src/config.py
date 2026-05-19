@@ -41,8 +41,8 @@ EEG_KEY_PATTERN = "_eeg"
 # PREPROCESSING CONFIG
 # =============================================================================
 
-WINDOW_SIZE = 600
-STEP_SIZE = 300
+WINDOW_SIZE = 512
+STEP_SIZE = WINDOW_SIZE // 2  # 50% overlap
 
 # =============================================================================
 # LLM CONFIGURATION
