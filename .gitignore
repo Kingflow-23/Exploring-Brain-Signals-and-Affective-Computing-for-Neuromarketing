@@ -1,5 +1,23 @@
+*.ipynb
+*__pycache__/
+*.pyc
+*.pdf
+*.pptx
+*.xlsx
+*.docx
+
+# data
 data/*
 !data/.gitkeep
 
-src/*
-!src/.gitkeep
+# Notebooks
+notebooks/*
+
+# models
+*.pkl
+model/deep_experiment/*
+
+# environment
+.env
+.vscode/
+venv/
