@@ -635,7 +635,6 @@ class Trainer:
 
             self.optimizer.zero_grad()
 
-            print(xb.shape)
             out = self.forward_batch(xb)
 
             loss = self.criterion(out, yb)
