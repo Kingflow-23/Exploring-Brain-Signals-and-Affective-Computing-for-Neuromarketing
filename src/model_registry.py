@@ -8,6 +8,7 @@ from train_deep_models import (
 from braindecode.models import EEGNet, Deep4Net, ShallowFBCSPNet, EEGConformer
 from config import WINDOW_SIZE
 
+
 def get_model(model_name, n_chans=62, n_classes=3):
 
     input_window_seconds = WINDOW_SIZE / 200
@@ -29,7 +30,8 @@ def get_model(model_name, n_chans=62, n_classes=3):
             n_chans=n_chans,
             n_outputs=n_classes,
             input_window_seconds=input_window_seconds,
-            sfreq=200,final_conv_length="auto"
+            sfreq=200,
+            final_conv_length="auto",
         )
 
     if model_name == "deep4net":
@@ -37,7 +39,8 @@ def get_model(model_name, n_chans=62, n_classes=3):
             n_chans=n_chans,
             n_outputs=n_classes,
             input_window_seconds=input_window_seconds,
-            sfreq=200,final_conv_length="auto"
+            sfreq=200,
+            final_conv_length="auto",
         )
 
     if model_name == "shallowconv":

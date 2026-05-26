@@ -13,17 +13,13 @@ from preprocessing import preprocess_dataset
 from feature_extraction import extract_dataset_features
 
 from train_deep_models import EEGDataset
-from torch.utils.data import DataLoader      
+from torch.utils.data import DataLoader
 
 from model_registry import get_model
 
 from config import DATASET_DIR, MODEL_DIR, OUTPUT_DIR
 
-from llm_inference import (
-    LMStudioClient,
-    extract_eeg_features,
-    build_eeg_prompt
-)
+from llm_inference import LMStudioClient, extract_eeg_features, build_eeg_prompt
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("BENCHMARK_INFER")
@@ -32,6 +28,7 @@ logger = logging.getLogger("BENCHMARK_INFER")
 # =========================================================
 # LOAD TEST SET ONLY
 # =========================================================
+
 
 def load_test_data():
     test_path = os.path.join(DATASET_DIR, "test")
@@ -46,6 +43,7 @@ def load_test_data():
 # =========================================================
 # ML INFERENCE
 # =========================================================
+
 
 def run_ml_inference(processed_test):
 
@@ -71,7 +69,7 @@ def run_ml_inference(processed_test):
         results[name] = {
             "acc": float(accuracy_score(y, preds)),
             "f1": float(f1_score(y, preds, average="macro")),
-            "cm": confusion_matrix(y, preds).tolist()
+            "cm": confusion_matrix(y, preds).tolist(),
         }
 
     return results
@@ -80,6 +78,7 @@ def run_ml_inference(processed_test):
 # =========================================================
 # DL INFERENCE
 # =========================================================
+
 
 def run_dl_inference(processed_test, model_dir, device):
 
@@ -124,7 +123,7 @@ def run_dl_inference(processed_test, model_dir, device):
         results[model_name] = {
             "acc": float(accuracy_score(targets, preds)),
             "f1": float(f1_score(targets, preds, average="macro")),
-            "cm": confusion_matrix(targets, preds).tolist()
+            "cm": confusion_matrix(targets, preds).tolist(),
         }
 
     return results
@@ -133,6 +132,7 @@ def run_dl_inference(processed_test, model_dir, device):
 # =========================================================
 # LLM INFERENCE
 # =========================================================
+
 
 def run_llm_inference(processed_test):
 
@@ -158,13 +158,14 @@ def run_llm_inference(processed_test):
     return {
         "acc": float(accuracy_score(y_true, results)),
         "f1": float(f1_score(y_true, results, average="macro")),
-        "cm": confusion_matrix(y_true, results).tolist()
+        "cm": confusion_matrix(y_true, results).tolist(),
     }
 
 
 # =========================================================
 # MAIN BENCHMARK
 # =========================================================
+
 
 def run_benchmark():
 
@@ -176,11 +177,7 @@ def run_benchmark():
     dl_results = run_dl_inference(test_data)
     llm_results = run_llm_inference(test_data)
 
-    final = {
-        "ml": ml_results,
-        "dl": dl_results,
-        "llm": llm_results
-    }
+    final = {"ml": ml_results, "dl": dl_results, "llm": llm_results}
 
     out_path = os.path.join(OUTPUT_DIR, "benchmark_inference.json")
 
