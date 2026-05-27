@@ -287,24 +287,21 @@ Emotion labels:
 
 positive:
 
-higher alpha
-higher gamma
-lower beta
-stable activity
+- alpha_ratio clearly exceeds theta_ratio and beta_ratio
+- gamma_ratio may also be elevated
+- activity variance tends to remain moderate
 
 negative:
 
-higher beta
-higher theta
-high activity variance
-low alpha
+- alpha_ratio clearly exceeds theta_ratio and beta_ratio
+- gamma_ratio may also be elevated
+- activity variance tends to remain moderate
 
 neutral:
 
-mixed dominance 
-unclear valence signal 
-competing alpha/beta/gamma
-Do NOT default to neutral. Always choose the strongest matching label.
+- no frequency band strongly dominates
+- alpha, beta, theta, and gamma remain relatively balanced
+- activity variance remains moderate
 
 Global Signal:
 - Mean amplitude: {features["mean"]:.6f}
@@ -387,6 +384,15 @@ Dominant band: gamma
 Activity variance: 1.01
 Label: neutral
 
+Example 7:
+Theta ratio: 0.27
+Alpha ratio: 0.24
+Beta ratio: 0.34
+Gamma ratio: 0.15
+Dominant band: beta
+Activity variance: 1.41
+Label: negative
+
 Respond with EXACTLY one word:
 positive
 neutral
@@ -427,11 +433,7 @@ class LMStudioClient:
             "messages": [
                 {
                     "role": "user",
-                    "content": (
-                        "You are a strict neuroscience classifier.\n"
-                        "Return only one label: positive, neutral, or negative.\n\n"
-                        + prompt
-                    ),
+                    "content": prompt,
                 }
             ],
             "temperature": self.temperature,
