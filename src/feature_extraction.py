@@ -1,47 +1,19 @@
 """
-===============================================================================
-EEG FEATURE EXTRACTION PIPELINE (SEED - PRODUCTION GRADE)
-===============================================================================
+EEG Feature Extraction Module for SEED Dataset.
 
-PURPOSE
--------
-Transforms EEG windows into fixed feature vectors for classical ML models.
+Extracts deterministic feature vectors from EEG windows for classical ML models.
 
-This module is STRICTLY deterministic:
-    same input window → same feature vector
+Key Features Extracted:
+    - Bandpower in frequency bands (theta, alpha, beta, gamma)
+    - Differential Entropy (DE) per channel
+    - Band-compressed Power Spectral Density (PSD)
+    - Asymmetry features (DASM/RASM) using anatomical channel pairs
 
-It MUST be shared across:
-    - training
-    - validation
-    - inference
-
-===============================================================================
-INPUT CONTRACT
-===============================================================================
-
-window: np.ndarray of shape (62, W)
-
-Where:
-    62 = EEG channels (fixed SEED montage order)
-    W  = time samples
-
-IMPORTANT:
-----------
-We assume channel ORDER is fixed and corresponds to SEED montage.
-
-We DO NOT depend on raw signal metadata at inference time,
-but we DO define a canonical channel map internally.
-
-===============================================================================
-FEATURE SET
-===============================================================================
-
-1. Bandpower (theta, alpha, beta, gamma)
-2. Differential Entropy (DE)
-3. Band-compressed PSD
-4. Asymmetry features (DASM / RASM using anatomical pairs)
-
-===============================================================================
+Design:
+    - Deterministic: same input window always produces same features
+    - Canonical channel order: fixed to SEED montage (62 channels)
+    - Compatible across training, validation, and inference
+    - No external metadata required at inference time
 """
 
 import logging
