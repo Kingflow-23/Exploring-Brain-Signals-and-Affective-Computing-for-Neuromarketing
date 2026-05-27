@@ -215,6 +215,25 @@ def extract_eeg_features(
     gamma_ratio = gamma / total
 
     # -------------------------------------------------------------------------
+    # Dominant band (for interpretability)
+    # -------------------------------------------------------------------------
+
+    dominant_band = max(
+        {
+            "theta": theta_ratio,
+            "alpha": alpha_ratio,
+            "beta": beta_ratio,
+            "gamma": gamma_ratio,
+        },
+        key=lambda k: {
+            "theta": theta_ratio,
+            "alpha": alpha_ratio,
+            "beta": beta_ratio,
+            "gamma": gamma_ratio,
+        }[k],
+    )
+
+    # -------------------------------------------------------------------------
     # Hjorth activity proxy
     # -------------------------------------------------------------------------
     activity = float(np.var(signal))
@@ -233,6 +252,7 @@ def extract_eeg_features(
         "alpha_ratio": alpha_ratio,
         "beta_ratio": beta_ratio,
         "gamma_ratio": gamma_ratio,
+        "dominant_band": dominant_band,
         "activity": activity,
     }
 
@@ -252,11 +272,39 @@ def build_eeg_prompt(features: dict) -> str:
     """
 
     return f"""
-You are an EEG emotion classifier.
+You are an expert EEG emotion recognition system.
 
-A subject watched a movie clip while EEG was recorded.
+You classify emotional valence from EEG-derived neuroscience features.
 
-Extracted EEG indicators:
+Classification rules:
+
+High alpha activity indicates calmness or positive affect
+High beta activity indicates arousal, stress, or cognitive activation
+High theta activity indicate fatigue, negative affect, or emotional load
+High gamma activity indicate intense engagement or positive stimulation
+
+Emotion labels:
+
+positive:
+
+higher alpha
+higher gamma
+lower beta
+stable activity
+
+negative:
+
+higher beta
+higher theta
+high activity variance
+low alpha
+
+neutral:
+
+mixed dominance 
+unclear valence signal 
+competing alpha/beta/gamma
+Do NOT default to neutral. Always choose the strongest matching label.
 
 Global Signal:
 - Mean amplitude: {features["mean"]:.6f}
@@ -270,6 +318,7 @@ Frequency Features:
 - Alpha ratio (8-13 Hz): {features["alpha_ratio"]:.6f}
 - Beta ratio (13-30 Hz): {features["beta_ratio"]:.6f}
 - Gamma ratio (30-45 Hz): {features["gamma_ratio"]:.6f}
+- Dominant band: {features["dominant_band"]}
 
 Brain Dynamics:
 - Activity variance: {features["activity"]:.6f}
@@ -282,7 +331,66 @@ positive
 neutral
 negative
 
-Return ONLY one label.
+Examples:
+
+Example 1:
+Theta ratio: 0.12
+Alpha ratio: 0.46
+Beta ratio: 0.18
+Gamma ratio: 0.24
+Dominant band: alpha
+Activity variance: 0.61
+Label: positive
+
+Example 2:
+Theta ratio: 0.10
+Alpha ratio: 0.39
+Beta ratio: 0.17
+Gamma ratio: 0.34
+Dominant band: gamma
+Activity variance: 0.72
+Label: positive
+
+Example 3:
+Theta ratio: 0.31
+Alpha ratio: 0.11
+Beta ratio: 0.47
+Gamma ratio: 0.11
+Dominant band: beta
+Activity variance: 1.88
+Label: negative
+
+Example 4:
+Theta ratio: 0.42
+Alpha ratio: 0.09
+Beta ratio: 0.37
+Gamma ratio: 0.12
+Dominant band: theta
+Activity variance: 2.14
+Label: negative
+
+Example 5:
+Theta ratio: 0.24
+Alpha ratio: 0.27
+Beta ratio: 0.29
+Gamma ratio: 0.20
+Dominant band: beta
+Activity variance: 0.97
+Label: neutral
+
+Example 6:
+Theta ratio: 0.22
+Alpha ratio: 0.26
+Beta ratio: 0.25
+Gamma ratio: 0.27
+Dominant band: gamma
+Activity variance: 1.01
+Label: neutral
+
+Respond with EXACTLY one word:
+positive
+neutral
+negative
 """.strip()
 
 
@@ -303,7 +411,7 @@ class LMStudioClient:
         self,
         base_url: str = "http://localhost:1234/v1/chat/completions",
         model: str = DEFAULT_MODEL,
-        temperature: float = 0.1,
+        temperature: float = 0.0,
     ):
         self.base_url = base_url
         self.model = model
@@ -369,7 +477,12 @@ def predict_emotion_from_eeg(
 
     prompt = build_eeg_prompt(features)
 
-    prediction = llm_client.generate(prompt)
+    raw = llm_client.generate(prompt).strip().lower()
+
+    if raw in ALLOWED_LABELS:
+        prediction = raw
+    else:
+        prediction = "neutral"  # fallback safe default
 
     return {
         "features": features,
