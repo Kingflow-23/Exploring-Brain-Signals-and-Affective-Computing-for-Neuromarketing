@@ -1,15 +1,14 @@
 """
-===============================================================================
-EEG PROJECT CONFIGURATION
-===============================================================================
+Project Configuration Module.
 
-Central configuration for:
-- dataset loading
-- preprocessing
-- model training
-- outputs
-- LLM inference
-===============================================================================
+Central configuration for all EEG processing, model training, and inference tasks.
+
+Includes:
+    - Dataset paths and loading parameters
+    - Preprocessing window and step configurations
+    - Label mappings for emotion classification
+    - ML/DL model training hyperparameters
+    - Random seed for reproducibility
 """
 
 from pathlib import Path
@@ -43,7 +42,7 @@ EEG_KEY_PATTERN = "_eeg"
 
 WINDOW_SIZE = 450
 ML_WINDOW_SIZE = 800
-LLM_WINDOW_SIZE = 1200
+LLM_WINDOW_SIZE = 600
 
 STEP_SIZE = WINDOW_SIZE // 2  # 50% overlap
 ML_STEP_SIZE = ML_WINDOW_SIZE // 2
