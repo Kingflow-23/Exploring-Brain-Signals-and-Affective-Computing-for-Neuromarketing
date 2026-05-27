@@ -1,102 +1,27 @@
 """
-===============================================================================
-EEG → LLM EMOTION INFERENCE PIPELINE (LM STUDIO READY)
-===============================================================================
+EEG to LLM Emotion Inference Pipeline.
 
-AUTHOR PURPOSE
-------------------------------------------------------------------------------
-This module converts EEG signals into interpretable features, transforms them
-into natural-language prompts, and asks a Large Language Model (LLM) to predict
-emotion labels.
+Bridges EEG signals to Large Language Models for emotion classification.
 
-This is designed for benchmarking against traditional EEG ML models.
+Pipeline:
+    EEG Signal → Feature Extraction → Natural Language Prompt → LLM → Emotion Label
 
-Target dataset:
-    SEED Dataset
+Key Features:
+    - Extracts neuroscience-relevant EEG features (bandpower, ratios, entropy)
+    - Converts features into human-readable text prompts
+    - Queries local LM Studio LLM for emotion prediction
+    - Supports emotion labels: positive, neutral, negative
 
-Emotion labels:
-    - positive
-    - neutral
-    - negative
+Design:
+    - Uses EEG-specific features rather than raw statistics
+    - Compatible with local LLM inference (LM Studio)
+    - Deterministic feature extraction for reproducibility
+    - Semantic understanding of EEG patterns through language models
 
-===============================================================================
-WHY THIS FILE EXISTS
-------------------------------------------------------------------------------
-
-Raw EEG data cannot be directly given to an LLM because:
-
-1. EEG is numeric time-series data
-   Shape example:
-        (62 channels, 47001 samples)
-
-2. LLMs expect text / semantic structure
-
-3. Context window limitations make raw EEG impossible to feed directly
-
-Therefore we build a bridge:
-
-    EEG Signal
-        ↓
-    Signal Features
-        ↓
-    Human-readable Summary
-        ↓
-    LLM Prediction
-
-===============================================================================
-WHY THIS IS SCIENTIFICALLY BETTER THAN BASIC STATS ONLY
-------------------------------------------------------------------------------
-
-Instead of only:
-
-- mean
-- std
-- max
-- min
-
-We include EEG-relevant neuroscience features:
-
-1. Band Power
-    - theta  (4–8 Hz)
-    - alpha  (8–13 Hz)
-    - beta   (13–30 Hz)
-    - gamma  (30–45 Hz)
-
-2. Relative Band Ratios
-
-3. Signal Variability
-
-4. Hjorth Activity (basic mobility proxy)
-
-These are much more meaningful for emotion recognition than plain mean values.
-
-===============================================================================
-EXPECTED INPUT
-------------------------------------------------------------------------------
-
-signal: np.ndarray
-
-Shape:
-    (62, T)
-
-Where:
-    62 = EEG electrodes
-    T  = time samples
-
-Sampling rate expected:
-    200 Hz (SEED preprocessed version)
-
-===============================================================================
-OUTPUT
-------------------------------------------------------------------------------
-
-{
-    "features": dict,
-    "prompt": str,
-    "prediction": str
-}
-
-===============================================================================
+Input:
+    EEG signal of shape (62, T) where:
+        62 = EEG channels (SEED montage)
+        T  = time samples
 """
 
 import numpy as np
