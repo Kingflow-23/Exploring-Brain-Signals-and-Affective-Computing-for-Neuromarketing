@@ -185,6 +185,7 @@ def run_dl_inference(processed_test, model_dir, device):
                 }
             }
     """
+    logger.info("DL inference running...")
 
     samples = []
     for s in processed_test:
@@ -363,9 +364,9 @@ def run_benchmark():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    llm_results = run_llm_inference(test_data)
     ml_results = run_ml_inference(test_data)
     dl_results = run_dl_inference(test_data, MODEL_DIR, device)
-    llm_results = run_llm_inference(test_data)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
