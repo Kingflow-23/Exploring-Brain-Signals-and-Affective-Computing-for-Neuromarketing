@@ -1,6 +1,20 @@
-# =============================================================================
-# BASELINE TRAINING PIPELINE (CLASSICAL ML ONLY)
-# =============================================================================
+"""
+Classical ML Baseline Training Pipeline for EEG Emotion Classification.
+
+Trains and evaluates traditional machine learning models for emotion recognition:
+    - Logistic Regression
+    - SGDClassifier
+    - Random Forest
+    - Extra Trees
+    - XGBoost
+
+Features:
+    - Subject-level train/test split (no subject leakage)
+    - Consistent feature extraction pipeline
+    - Comprehensive evaluation metrics
+    - Model persistence and checkpointing
+    - Cross-validation for robustness
+"""
 
 import os
 import time
@@ -27,10 +41,6 @@ from preprocessing import preprocess_dataset
 from feature_extraction import extract_features
 from config import DATASET_DIR, MODEL_DIR, RANDOM_STATE, TEST_SIZE
 
-# =============================================================================
-# LOGGING
-# =============================================================================
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -39,29 +49,19 @@ logging.basicConfig(
 logger = logging.getLogger("BASELINE_TRAINER")
 
 
-# =============================================================================
-# FEATURE EXTRACTION (CLEAN WRAPPER ONLY)
-# =============================================================================
-
-
 def extract_dataset_features(processed_dataset):
     """
-    Convert preprocessed EEG windows into ML-ready dataset.
+    Convert preprocessed EEG windows into ML-ready feature matrix.
 
-    INPUT:
-        processed_dataset:
-            [
-                {
-                    "windows": (N, 62, W),
-                    "label": int,
-                    "subject": int
-                }
-            ]
+    Parameters
+    ----------
+    processed_dataset : list
+        List of preprocessed samples containing windows and metadata.
 
-    OUTPUT:
-        X: (total_windows, F)
-        y: (total_windows,)
-        groups: (total_windows,)
+    Returns
+    -------
+    tuple
+        (X, y, groups) where X is feature matrix, y is labels, groups is subject IDs
     """
 
     logger.info("Extracting features using feature_extraction module...")
