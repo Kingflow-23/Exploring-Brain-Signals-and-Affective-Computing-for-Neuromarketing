@@ -42,7 +42,12 @@ EEG_KEY_PATTERN = "_eeg"
 # =============================================================================
 
 WINDOW_SIZE = 450
+ML_WINDOW_SIZE = 800
+LLM_WINDOW_SIZE = 1200
+
 STEP_SIZE = WINDOW_SIZE // 2  # 50% overlap
+ML_STEP_SIZE = ML_WINDOW_SIZE // 2
+LLM_STEP_SIZE = LLM_WINDOW_SIZE // 2
 
 # =============================================================================
 # LLM CONFIGURATION
