@@ -1,6 +1,22 @@
-# =============================================================================
-# EEG DEEP LEARNING FRAMEWORK (PRODUCTION-GRADE)
-# =============================================================================
+"""
+EEG Deep Learning Framework for SEED Dataset.
+
+Trains and evaluates deep neural network models for EEG-based emotion classification.
+
+Supports multiple architectures:
+    - CNN-based models (EEGNet, Deep4Net, ShallowFBCSPNet)
+    - RNN-based models (LSTM, GRU)
+    - Temporal Convolutional Networks (TCN)
+    - Hybrid models (CNN-LSTM, Attention mechanisms)
+    - Transformer-based models (EEGConformer)
+
+Features:
+    - Subject-level train/test split (no subject leakage)
+    - Reproducible training with seed control
+    - GPU support with automatic device detection
+    - Checkpointing and model persistence
+    - Comprehensive logging and progress tracking
+"""
 
 import os
 import time
@@ -33,10 +49,6 @@ from config import (
     N_EPOCHS,
 )
 
-# =============================================================================
-# LOGGING
-# =============================================================================
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -45,12 +57,15 @@ logging.basicConfig(
 logger = logging.getLogger("EEG_TRAINER")
 
 
-# =============================================================================
-# REPRODUCIBILITY
-# =============================================================================
-
-
 def seed_everything(seed=42):
+    """
+    Set random seeds for reproducible results.
+
+    Parameters
+    ----------
+    seed : int, optional
+        Random seed value, by default 42
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -114,17 +129,20 @@ class EEGDataset(Dataset):
 
 def build_deep_dataset(processed):
     """
-    Flattens preprocessed SEED dataset into supervised learning tensors.
+    Flatten preprocessed SEED dataset into supervised learning samples.
 
-    This function converts:
-        - multiple subjects
-        - multiple trials
-        - multiple EEG windows per trial
+    Converts preprocessed data (multiple subjects, trials, windows) into
+    a single flat list of (window, label, subject) tuples for training.
 
-    into a single training dataset.
+    Parameters
+    ----------
+    processed : list
+        Preprocessed EEG dataset from preprocessing.preprocess_dataset().
 
-    Returns:
-        samples: list of tuples (window, label, subject)
+    Returns
+    -------
+    list
+        List of (window, label, subject) tuples ready for DataLoader.
     """
 
     logger.info("Building deep dataset...")
