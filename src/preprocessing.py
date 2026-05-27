@@ -205,7 +205,9 @@ def preprocess_trial(
 # =============================================================================
 
 
-def preprocess_dataset(dataset: list) -> list:
+def preprocess_dataset(
+    dataset: list, window_size: int = WINDOW_SIZE, step_size: int = STEP_SIZE
+) -> list:
     """
     Convert full SEED dataset into windowed ML-ready format.
 
@@ -238,7 +240,7 @@ def preprocess_dataset(dataset: list) -> list:
 
         signal = sample["signal"]
 
-        windows = preprocess_trial(signal)
+        windows = preprocess_trial(signal, window_size=window_size, step_size=step_size)
 
         processed.append(
             {
