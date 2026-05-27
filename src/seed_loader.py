@@ -26,7 +26,6 @@ logging.basicConfig(
 logger = logging.getLogger("SEED_LOADER")
 
 
-
 def load_labels(label_path):
     """
     Load emotion labels from SEED dataset.
@@ -68,8 +67,6 @@ def load_labels(label_path):
             return labels
 
     raise ValueError("No valid label found in label.mat")
-
-
 
 
 def detect_prefix(mat):

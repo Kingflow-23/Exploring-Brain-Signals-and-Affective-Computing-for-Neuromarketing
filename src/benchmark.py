@@ -86,6 +86,7 @@ def prepare_dl_data(raw):
 def prepare_llm_data(raw):
     return preprocess_dataset(raw, window_size=LLM_WINDOW_SIZE, step_size=LLM_STEP_SIZE)
 
+
 def majority_vote(predictions):
     """
     Majority voting over window predictions.
@@ -112,10 +113,10 @@ def build_metrics(y_true, y_pred):
 def extract_window_features(window, label, subject):
     """
     Extract features for a single EEG window.
-    
+
     Encapsulates feature extraction logic to avoid repeated
     dataset pipeline initialization per window.
-    
+
     Parameters
     ----------
     window : np.ndarray
@@ -124,20 +125,23 @@ def extract_window_features(window, label, subject):
         Emotion label (0=negative, 1=neutral, 2=positive)
     subject : int
         Subject ID
-    
+
     Returns
     -------
     np.ndarray
         Extracted features for the window
     """
     feats = extract_dataset_features(
-        [{
-            "windows": [window],
-            "label": label,
-            "subject": subject,
-        }]
+        [
+            {
+                "windows": [window],
+                "label": label,
+                "subject": subject,
+            }
+        ]
     )[0][0]
     return feats
+
 
 # =========================================================
 # ML INFERENCE
@@ -197,11 +201,11 @@ def run_ml_inference(processed_test):
             continue
 
         model = joblib.load(model_path)
-        
+
         # =====================================================
         # BUILD WINDOW FEATURES + TRACK TRIAL IDS
         # =====================================================
-        
+
         X = []
         y = []
         trial_ids = []
@@ -348,11 +352,7 @@ def run_dl_inference(processed_test, model_dir, device):
             x, y, subj, tid = self.samples[idx]
             return x, y, tid
 
-    loader = DataLoader(
-        TrialEEGDataset(samples),
-        batch_size=64,
-        shuffle=False
-    )
+    loader = DataLoader(TrialEEGDataset(samples), batch_size=64, shuffle=False)
 
     results = {}
 
@@ -553,6 +553,7 @@ def run_llm_inference(processed_test):
         "window_level": window_metrics,
         "trial_level": trial_metrics,
     }
+
 
 # =========================================================
 # MAIN BENCHMARK
