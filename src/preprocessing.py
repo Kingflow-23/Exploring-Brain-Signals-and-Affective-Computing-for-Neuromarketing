@@ -1,98 +1,19 @@
 """
-===============================================================================
-EEG PREPROCESSING PIPELINE — SEED DATASET
-===============================================================================
+EEG Preprocessing Module for SEED Dataset.
 
-🧠 WHY DO WE NEED EEG PREPROCESSING?
--------------------------------------------------------------------------------
-Raw EEG signals are not directly usable by machine learning models because:
+Transforms raw EEG trials into fixed-length windows for machine learning models.
 
-1. EEG is continuous time-series data
-   → each trial has variable length (not fixed-size input)
+Key Operations:
+    - Splits variable-length EEG trials into overlapping windows
+    - Applies optional z-score normalization
+    - Maintains metadata (subject, trial, label) for each window
+    - Outputs structured dataset format compatible with ML/DL pipelines
 
-2. EEG signals are noisy and non-stationary
-   → amplitude varies across:
-        - subjects
-        - sessions
-        - electrodes
-
-3. ML models require structured input
-   → fixed-size tensors (not raw variable-length signals)
-
-4. Deep models (CNN / Transformers / LLM pipelines) require:
-   → consistent shape
-   → normalized distribution
-   → temporal segmentation
-
--------------------------------------------------------------------------------
-WHAT WE ALREADY HAVE (SEED PREPROCESSED DATA)
--------------------------------------------------------------------------------
-The SEED dataset already provides:
-
-✔ Downsampled EEG → 200 Hz
-✔ Bandpass filtered → 0–75 Hz
-✔ Cleaned and segmented into trials
-✔ 62 EEG channels per sample
-
-So we DO NOT need:
-✘ Raw signal filtering
-✘ Artifact removal (ICA, EOG cleaning)
-✘ Downsampling
-✘ Basic segmentation
-
--------------------------------------------------------------------------------
-WHAT IS STILL REQUIRED (THIS FILE DOES THIS PART)
--------------------------------------------------------------------------------
-
-We still must transform raw trial signals:
-
-    (62, T variable length)
-
-into ML-ready tensors:
-
-    (N_windows, 62, window_size)
-
-This is required because:
-
-✔ Neural networks need fixed-size input
-✔ Temporal patterns must be captured locally
-✔ Long EEG trials must be decomposed into segments
-
--------------------------------------------------------------------------------
-WHAT THIS PIPELINE DOES
--------------------------------------------------------------------------------
-
-1. Takes EEG trial: (62, T)
-2. Applies optional normalization (z-score)
-3. Splits signal into overlapping windows
-4. Outputs structured dataset:
-
-    {
-        "windows": (N, 62, W),
-        "label": int,
-        "subject": int,
-        "trial": int
-    }
-
--------------------------------------------------------------------------------
-DESIGN CHOICES
--------------------------------------------------------------------------------
-
-✔ Windowing instead of full-trial modeling
-    → reduces noise
-    → increases training samples
-    → stabilizes learning
-
-✔ No filtering or artifact removal
-    → already done in SEED preprocessing
-
-✔ Z-score normalization optional
-    → improves convergence in deep models
-
-✔ Overlap supported (default 50%)
-    → improves temporal smoothness
-
-===============================================================================
+Design Notes:
+    - SEED data is already filtered (0-75 Hz) and downsampled (200 Hz)
+    - No additional artifact removal is applied
+    - Windows can overlap (controlled by step_size parameter)
+    - Normalization is applied per-sample to maintain signal structure
 """
 
 import numpy as np
