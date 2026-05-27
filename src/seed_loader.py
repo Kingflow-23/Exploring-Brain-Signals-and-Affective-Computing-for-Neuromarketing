@@ -1,3 +1,16 @@
+"""
+SEED Dataset Loader Module.
+
+Loads raw EEG recordings from the SEED (Salient Emotion Emotion Database) dataset
+and reconstructs the original data structure (subjects, trials, labels).
+
+Key Features:
+    - Loads emotion labels from .mat files
+    - Reconstructs EEG trial structure with metadata
+    - Handles subject-level data organization
+    - Logs progress for large file operations
+"""
+
 import os
 import logging
 import numpy as np
@@ -6,19 +19,6 @@ from scipy.io import loadmat
 
 from config import N_TRIALS, LABEL_FILE, EEG_KEY_PATTERN
 
-# =============================================================================
-# LOGGING CONFIGURATION
-# =============================================================================
-
-"""
-Logging is used to track dataset loading progress in real time.
-
-This is critical in EEG pipelines because:
-- files are large
-- silent failures are common
-- subject-level debugging is required
-"""
-
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
 )
@@ -26,52 +26,30 @@ logging.basicConfig(
 logger = logging.getLogger("SEED_LOADER")
 
 
-# =============================================================================
-# LABEL LOADER
-# =============================================================================
-
 
 def load_labels(label_path):
     """
     Load emotion labels from SEED dataset.
 
-    -------------------------------------------------------------------------
-    Purpose
-    -------------------------------------------------------------------------
-    The SEED dataset stores emotion labels separately in a .mat file.
-    These labels correspond to 15 trials per subject:
+    The SEED dataset stores emotion labels in a .mat file with 15 labels per subject:
         - 1 = positive emotion
         - 0 = neutral emotion
         - -1 = negative emotion
 
-    -------------------------------------------------------------------------
-    Expected Input Format
-    -------------------------------------------------------------------------
-    MATLAB .mat file containing one valid variable:
-        shape can be:
-            (15,)
-            (1, 15)
-            (15, 15)
+    Parameters
+    ----------
+    label_path : str
+        Path to MATLAB .mat file containing emotion labels.
 
-    -------------------------------------------------------------------------
-    Processing Steps
-    -------------------------------------------------------------------------
-    1. Load .mat file
-    2. Remove MATLAB metadata keys (__header__, etc.)
-    3. Extract first valid variable
-    4. Normalize shape for consistent indexing
-
-    -------------------------------------------------------------------------
     Returns
-    -------------------------------------------------------------------------
-    np.ndarray:
-        Normalized label array (always at least 2D-safe for indexing)
+    -------
+    np.ndarray
+        Normalized label array, shape (1, n_trials) or (n_trials, n_trials).
 
-    -------------------------------------------------------------------------
-    Notes
-    -------------------------------------------------------------------------
-    This function ensures compatibility across different SEED versions
-    where label shapes may differ.
+    Raises
+    ------
+    ValueError
+        If no valid label variable found in the .mat file.
     """
 
     logger.info(f"Loading labels from: {label_path}")
@@ -92,12 +70,22 @@ def load_labels(label_path):
     raise ValueError("No valid label found in label.mat")
 
 
-# =============================================================================
-# EEG PREFIX DETECTION
-# =============================================================================
 
 
 def detect_prefix(mat):
+    """
+    Detect EEG data prefix from MATLAB structure keys.
+
+    Parameters
+    ----------
+    mat : dict
+        MATLAB structure loaded as dictionary.
+
+    Returns
+    -------
+    str or None
+        The detected EEG key prefix, or None if not found.
+    """
     """
     Automatically detect subject-specific EEG prefix.
 
