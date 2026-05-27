@@ -17,7 +17,18 @@ from torch.utils.data import DataLoader
 from datetime import datetime
 from model_registry import get_model
 
-from config import DATASET_DIR, MODEL_DIR, OUTPUT_DIR, LABELS_MAPPER
+from config import (
+    DATASET_DIR,
+    MODEL_DIR,
+    OUTPUT_DIR,
+    LABELS_MAPPER,
+    WINDOW_SIZE,
+    ML_WINDOW_SIZE,
+    LLM_WINDOW_SIZE,
+    STEP_SIZE,
+    ML_STEP_SIZE,
+    LLM_STEP_SIZE,
+)
 
 from llm_inference import LMStudioClient, extract_eeg_features, build_eeg_prompt
 
@@ -36,11 +47,7 @@ def load_test_data():
 
     Pipeline:
         1. Load raw EEG recordings from dedicated test folder
-        2. Apply preprocessing pipeline
-            - filtering
-            - normalization
-            - segmentation/windowing
-        3. Return processed EEG samples
+        2. Reconstruct original data structure (subjects, trials, labels)
 
     IMPORTANT:
         This function assumes the dataset has already been split
@@ -48,21 +55,34 @@ def load_test_data():
 
     Returns
     -------
-    list[dict]
-        Preprocessed EEG dataset where each element contains:
-            {
-                "windows": np.ndarray,
-                "label": int,
-                "subject": int
-            }
+    list
+        List of preprocessed EEG samples:
+            [
+                {
+                    "subject": int,
+                    "trial": int,
+                    "label": int,
+                    "windows": list of np.array
+                },
     """
     test_path = os.path.join(DATASET_DIR, "test")
     logger.info(f"Loading test set from {test_path}")
 
     raw = build_seed_dataset(test_path)
-    processed = preprocess_dataset(raw)
 
-    return processed
+    return raw
+
+
+def prepare_ml_data(raw):
+    return preprocess_dataset(raw, window_size=ML_WINDOW_SIZE, step_size=ML_STEP_SIZE)
+
+
+def prepare_dl_data(raw):
+    return preprocess_dataset(raw, window_size=WINDOW_SIZE, step_size=STEP_SIZE)
+
+
+def prepare_llm_data(raw):
+    return preprocess_dataset(raw, window_size=LLM_WINDOW_SIZE, step_size=LLM_STEP_SIZE)
 
 
 # =========================================================
@@ -360,13 +380,17 @@ def run_benchmark():
 
     logger.info("========== INFERENCE BENCHMARK START ==========")
 
-    test_data = load_test_data()
+    raw = load_test_data()
+
+    dl_data = prepare_dl_data(raw)
+    ml_data = prepare_ml_data(raw)
+    llm_data = prepare_llm_data(raw)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    llm_results = run_llm_inference(test_data)
-    ml_results = run_ml_inference(test_data)
-    dl_results = run_dl_inference(test_data, MODEL_DIR, device)
+    ml_results = run_ml_inference(ml_data)
+    dl_results = run_dl_inference(dl_data, MODEL_DIR, device)
+    llm_results = run_llm_inference(llm_data)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
