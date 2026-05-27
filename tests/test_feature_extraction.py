@@ -1,3 +1,15 @@
+"""
+EEG Feature Extraction Tests.
+
+Validates feature extraction functionality:
+    - Output shape and dimensionality
+    - Numerical validity (no NaN/Inf)
+    - Deterministic extraction
+    - Feature vector properties
+
+Focus: Correctness and reproducibility.
+"""
+
 import numpy as np
 
 from feature_extraction import extract_features

@@ -1,17 +1,13 @@
 """
-===============================================================================
-EEG PREPROCESSING TESTS (SEED PIPELINE)
-===============================================================================
+EEG Preprocessing Pipeline Tests.
 
-Goal:
------
-Ensure preprocessing pipeline correctly:
-1. Normalizes EEG signals
-2. Splits into valid sliding windows
-3. Produces ML-ready tensor shapes
+Tests core preprocessing functionality:
+    - Z-score normalization
+    - Sliding window generation
+    - Trial-level preprocessing
+    - Dataset-level preprocessing
 
-We avoid complex mocking and focus on structural correctness only.
-===============================================================================
+Focus: Structural correctness and numerical validity.
 """
 
 import numpy as np

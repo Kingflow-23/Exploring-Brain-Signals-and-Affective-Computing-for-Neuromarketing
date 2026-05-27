@@ -1,10 +1,13 @@
 """
-Simple sanity tests for SEED dataset loader.
+SEED Dataset Loader Tests.
 
-Goal:
-- Verify that core pipeline works
-- Avoid complex mocking
-- Ensure basic structural correctness
+Validates core loader functionality:
+    - Label loading from .mat files
+    - EEG key prefix detection
+    - Subject data loading
+    - Complete dataset building
+
+Focus: Structural integrity and basic correctness.
 """
 
 import numpy as np

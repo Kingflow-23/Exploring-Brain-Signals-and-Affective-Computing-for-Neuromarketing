@@ -1,19 +1,13 @@
 """
-===============================================================================
-TESTS — EEG → LLM PIPELINE
-===============================================================================
+EEG to LLM Inference Pipeline Tests.
 
-Goal:
------
-Validate correctness of EEG feature extraction + prompt generation +
-LLM integration logic without requiring real LM Studio calls.
+Validates EEG feature extraction, prompt generation, and LLM integration:
+    - Feature extraction correctness
+    - Prompt generation and formatting
+    - Emotion prediction logic
+    - Integration without real LM Studio calls
 
-Strategy:
----------
-- deterministic synthetic EEG signal
-- mock LM client
-- structural validation only
-===============================================================================
+Uses synthetic signals and mocking for isolated unit testing.
 """
 
 import numpy as np
