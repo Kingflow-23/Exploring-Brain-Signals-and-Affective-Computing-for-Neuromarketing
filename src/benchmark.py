@@ -14,6 +14,8 @@ from feature_extraction import extract_dataset_features
 from train_deep_models import EEGDataset
 from torch.utils.data import DataLoader
 
+from collections import Counter, defaultdict
+
 from datetime import datetime
 from model_registry import get_model
 
@@ -84,6 +86,58 @@ def prepare_dl_data(raw):
 def prepare_llm_data(raw):
     return preprocess_dataset(raw, window_size=LLM_WINDOW_SIZE, step_size=LLM_STEP_SIZE)
 
+def majority_vote(predictions):
+    """
+    Majority voting over window predictions.
+    """
+
+    if len(predictions) == 0:
+        return None
+
+    return Counter(predictions).most_common(1)[0][0]
+
+
+def build_metrics(y_true, y_pred):
+    """
+    Standard metric bundle.
+    """
+
+    return {
+        "acc": float(accuracy_score(y_true, y_pred)),
+        "f1": float(f1_score(y_true, y_pred, average="macro")),
+        "cm": confusion_matrix(y_true, y_pred).tolist(),
+    }
+
+
+def extract_window_features(window, label, subject):
+    """
+    Extract features for a single EEG window.
+    
+    Encapsulates feature extraction logic to avoid repeated
+    dataset pipeline initialization per window.
+    
+    Parameters
+    ----------
+    window : np.ndarray
+        Single EEG window
+    label : int
+        Emotion label (0=negative, 1=neutral, 2=positive)
+    subject : int
+        Subject ID
+    
+    Returns
+    -------
+    np.ndarray
+        Extracted features for the window
+    """
+    feats = extract_dataset_features(
+        [{
+            "windows": [window],
+            "label": label,
+            "subject": subject,
+        }]
+    )[0][0]
+    return feats
 
 # =========================================================
 # ML INFERENCE
@@ -119,16 +173,17 @@ def run_ml_inference(processed_test):
         Per-model benchmark results:
             {
                 model_name: {
-                    "acc": float,
-                    "f1": float,
-                    "cm": list
+                    "window_level": {"acc": float, "f1": float, "cm": list},
+                    "trial_level": {"acc": float, "f1": float, "cm": list}
                 }
             }
     """
 
     logger.info("ML inference running...")
 
-    X, y, _ = extract_dataset_features(processed_test)
+    if not processed_test:
+        logger.warning("No test data provided for ML inference")
+        return {}
 
     results = {}
 
@@ -142,13 +197,70 @@ def run_ml_inference(processed_test):
             continue
 
         model = joblib.load(model_path)
+        
+        # =====================================================
+        # BUILD WINDOW FEATURES + TRACK TRIAL IDS
+        # =====================================================
+        
+        X = []
+        y = []
+        trial_ids = []
+
+        for sample in processed_test:
+
+            for window in sample["windows"]:
+
+                feats = extract_window_features(
+                    window,
+                    sample["label"],
+                    sample["subject"],
+                )
+
+                X.append(feats)
+                y.append(sample["label"])
+                trial_ids.append(sample["trial"])
+
+        if not X:
+            logger.warning(f"No features extracted for model {name}")
+            continue
 
         preds = model.predict(X)
 
+        # =====================================================
+        # WINDOW LEVEL
+        # =====================================================
+
+        window_metrics = build_metrics(y, preds)
+
+        # =====================================================
+        # TRIAL LEVEL (Majority Vote)
+        # =====================================================
+
+        grouped_preds = defaultdict(list)
+        grouped_targets = {}
+
+        for pred, target, tid in zip(preds, y, trial_ids):
+            grouped_preds[tid].append(pred)
+            grouped_targets[tid] = target
+
+        trial_preds = []
+        trial_targets = []
+
+        for tid in sorted(grouped_preds.keys()):
+            trial_pred = majority_vote(grouped_preds[tid])
+            if trial_pred is not None:
+                trial_preds.append(trial_pred)
+                trial_targets.append(grouped_targets[tid])
+
+        if trial_preds:
+            trial_metrics = build_metrics(trial_targets, trial_preds)
+        else:
+            logger.warning(f"No valid trial predictions for model {name}")
+            trial_metrics = {"acc": 0.0, "f1": 0.0, "cm": []}
+
         results[name] = {
-            "acc": float(accuracy_score(y, preds)),
-            "f1": float(f1_score(y, preds, average="macro")),
-            "cm": confusion_matrix(y, preds).tolist(),
+            "window_level": window_metrics,
+            "trial_level": trial_metrics,
         }
 
     return results
@@ -199,24 +311,56 @@ def run_dl_inference(processed_test, model_dir, device):
         Per-model benchmark results:
             {
                 model_name: {
-                    "acc": float,
-                    "f1": float,
-                    "cm": list
+                    "window_level": {"acc": float, "f1": float, "cm": list},
+                    "trial_level": {"acc": float, "f1": float, "cm": list}
                 }
             }
     """
     logger.info("DL inference running...")
 
-    samples = []
-    for s in processed_test:
-        for w in s["windows"]:
-            samples.append((w, s["label"], s["subject"]))
+    if not processed_test:
+        logger.warning("No test data provided for DL inference")
+        return {}
 
-    loader = DataLoader(EEGDataset(samples), batch_size=64)
+    samples = []
+
+    for s in processed_test:
+
+        for w in s["windows"]:
+
+            samples.append(
+                (
+                    w,
+                    s["label"],
+                    s["subject"],
+                    s["trial"],
+                )
+            )
+
+    class TrialEEGDataset(torch.utils.data.Dataset):
+        def __init__(self, samples):
+            self.samples = samples
+
+        def __len__(self):
+            return len(self.samples)
+
+        def __getitem__(self, idx):
+            x, y, subj, tid = self.samples[idx]
+            return x, y, tid
+
+    loader = DataLoader(
+        TrialEEGDataset(samples),
+        batch_size=64,
+        shuffle=False
+    )
 
     results = {}
 
     deep_dir = os.path.join(model_dir, "deep_experiment")
+
+    if not os.path.exists(deep_dir):
+        logger.warning(f"Deep model directory not found: {deep_dir}")
+        return {}
 
     for file in os.listdir(deep_dir):
 
@@ -229,17 +373,23 @@ def run_dl_inference(processed_test, model_dir, device):
         entry = get_model(model_name)
 
         model = entry["model"].to(device)
+
         input_mode = entry["input_mode"]
 
         state = torch.load(model_path, map_location=device)
+
         model.load_state_dict(state)
 
         model.eval()
 
-        preds, targets = [], []
+        preds = []
+        targets = []
+        trial_ids = []
 
         with torch.no_grad():
-            for xb, yb, _ in loader:
+
+            for xb, yb, tids in loader:
+
                 xb = xb.to(device)
 
                 if input_mode == "eeg_4d":
@@ -249,13 +399,49 @@ def run_dl_inference(processed_test, model_dir, device):
 
                 pred = out.argmax(dim=1)
 
-                preds.extend(pred.detach().cpu().numpy())
-                targets.extend(yb.detach().cpu().numpy())
+                preds.extend(pred.cpu().numpy())
+                targets.extend(yb.numpy())
+                trial_ids.extend(tids.numpy())
+
+        if not preds:
+            logger.warning(f"No predictions from model {model_name}")
+            continue
+
+        # =====================================================
+        # WINDOW LEVEL
+        # =====================================================
+
+        window_metrics = build_metrics(targets, preds)
+
+        # =====================================================
+        # TRIAL LEVEL (Majority Vote)
+        # =====================================================
+
+        grouped_preds = defaultdict(list)
+        grouped_targets = {}
+
+        for pred, target, tid in zip(preds, targets, trial_ids):
+            grouped_preds[tid].append(pred)
+            grouped_targets[tid] = target
+
+        trial_preds = []
+        trial_targets = []
+
+        for tid in sorted(grouped_preds.keys()):
+            trial_pred = majority_vote(grouped_preds[tid])
+            if trial_pred is not None:
+                trial_preds.append(trial_pred)
+                trial_targets.append(grouped_targets[tid])
+
+        if trial_preds:
+            trial_metrics = build_metrics(trial_targets, trial_preds)
+        else:
+            logger.warning(f"No valid trial predictions for model {model_name}")
+            trial_metrics = {"acc": 0.0, "f1": 0.0, "cm": []}
 
         results[model_name] = {
-            "acc": float(accuracy_score(targets, preds)),
-            "f1": float(f1_score(targets, preds, average="macro")),
-            "cm": confusion_matrix(targets, preds).tolist(),
+            "window_level": window_metrics,
+            "trial_level": trial_metrics,
         }
 
     return results
@@ -298,41 +484,75 @@ def run_llm_inference(processed_test):
     dict
         Benchmark metrics:
             {
-                "acc": float,
-                "f1": float,
-                "cm": list
+                "window_level": {"acc": float, "f1": float, "cm": list},
+                "trial_level": {"acc": float, "f1": float, "cm": list}
             }
     """
 
     logger.info("LLM inference running...")
 
+    if not processed_test:
+        logger.warning("No test data provided for LLM inference")
+        return {
+            "window_level": {"acc": 0.0, "f1": 0.0, "cm": []},
+            "trial_level": {"acc": 0.0, "f1": 0.0, "cm": []},
+        }
+
     client = LMStudioClient()
 
-    results = []
-    y_true = []
+    window_preds = []
+    window_targets = []
+
+    trial_preds = []
+    trial_targets = []
 
     for sample in tqdm(processed_test, desc="LLM"):
+
+        current_trial_preds = []
+        trial_had_predictions = False
 
         for window in sample["windows"]:
 
             feats = extract_eeg_features(window)
             prompt = build_eeg_prompt(feats)
-
             pred = client.generate(prompt)
 
+            # Handle invalid predictions by defaulting to neutral (label 1)
             if pred not in LABELS_MAPPER:
-                continue
+                pred_id = 1  # neutral as default
+                logger.debug(f"Invalid LLM prediction '{pred}', defaulting to neutral")
+            else:
+                pred_id = LABELS_MAPPER[pred]
 
-            results.append(LABELS_MAPPER[pred])
+            window_preds.append(pred_id)
+            window_targets.append(sample["label"])
+            current_trial_preds.append(pred_id)
+            trial_had_predictions = True
 
-            y_true.append(sample["label"])
+        # Trial-level prediction via majority voting
+        if trial_had_predictions:
+            trial_pred = majority_vote(current_trial_preds)
+            if trial_pred is not None:
+                trial_preds.append(trial_pred)
+                trial_targets.append(sample["label"])
+
+    # Build metrics with empty list handling
+    window_metrics = (
+        build_metrics(window_targets, window_preds)
+        if window_preds
+        else {"acc": 0.0, "f1": 0.0, "cm": []}
+    )
+
+    trial_metrics = (
+        build_metrics(trial_targets, trial_preds)
+        if trial_preds
+        else {"acc": 0.0, "f1": 0.0, "cm": []}
+    )
 
     return {
-        "acc": float(accuracy_score(y_true, results)),
-        "f1": float(f1_score(y_true, results, average="macro")),
-        "cm": confusion_matrix(y_true, results).tolist(),
+        "window_level": window_metrics,
+        "trial_level": trial_metrics,
     }
-
 
 # =========================================================
 # MAIN BENCHMARK
