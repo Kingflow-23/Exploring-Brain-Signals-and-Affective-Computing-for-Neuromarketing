@@ -1,7 +1,7 @@
 """
 SEED Dataset Loader Module.
 
-Loads raw EEG recordings from the SEED (Salient Emotion Emotion Database) dataset
+Loads raw EEG recordings from the SEED dataset
 and reconstructs the original data structure (subjects, trials, labels).
 
 Key Features:
@@ -71,7 +71,14 @@ def load_labels(label_path):
 
 def detect_prefix(mat):
     """
-    Detect EEG data prefix from MATLAB structure keys.
+    Automatically detect subject-specific EEG prefix from MATLAB file.
+
+    SEED MAT files use subject-dependent prefixes such as:
+        djc_eeg1, djc_eeg2, ...
+        jl_eeg1, jl_eeg2, ...
+
+    This function extracts the prefix dynamically by searching for keys
+    containing the EEG pattern and extracting the subject identifier.
 
     Parameters
     ----------
@@ -80,32 +87,20 @@ def detect_prefix(mat):
 
     Returns
     -------
-    str or None
-        The detected EEG key prefix, or None if not found.
-    """
-    """
-    Automatically detect subject-specific EEG prefix.
+    str
+        The detected EEG prefix (e.g., "djc", "jl").
 
-    -------------------------------------------------------------------------
-    Purpose
-    -------------------------------------------------------------------------
-    SEED MAT files use subject-dependent prefixes such as:
-        djc_eeg1
-        jl_eeg1
+    Raises
+    ------
+    ValueError
+        If no EEG key with the pattern is found in the MATLAB file.
 
-    This function extracts the prefix dynamically.
-
-    -------------------------------------------------------------------------
-    Logic
-    -------------------------------------------------------------------------
-    - Search for any key containing "_eeg1"
-    - Extract substring before it
-    - Return prefix
-
-    -------------------------------------------------------------------------
-    Returns
-    -------------------------------------------------------------------------
-    str: EEG prefix (e.g., "djc")
+    Examples
+    --------
+    >>> mat = {'djc_eeg1': array(...), 'djc_eeg2': array(...)}
+    >>> prefix = detect_prefix(mat)
+    >>> prefix
+    'djc'
     """
 
     for k in mat.keys():
