@@ -102,15 +102,26 @@ def preprocess_trial(
     step_size: int = STEP_SIZE,
 ) -> np.ndarray:
     """
-    Full preprocessing pipeline for one EEG trial.
+    Preprocess a single EEG trial through the complete pipeline.
 
-    Steps:
-    ------
-    1. Optional normalization (z-score)
-    2. Sliding window segmentation
+    Applies normalization and sliding window segmentation to convert
+    a variable-length EEG trial into fixed-length windows for modeling.
 
-    OUTPUT:
-        (N_windows, 62, window_size)
+    Parameters
+    ----------
+    signal : np.ndarray
+        Raw EEG trial with shape (62, T) where T is variable length
+    normalize : bool, optional
+        Whether to apply z-score normalization, by default True
+    window_size : int, optional
+        Size of each window in samples, by default WINDOW_SIZE
+    step_size : int, optional
+        Step size between windows (for overlap control), by default STEP_SIZE
+
+    Returns
+    -------
+    np.ndarray
+        Windowed signal with shape (n_windows, 62, window_size)
     """
 
     if normalize:
@@ -130,27 +141,40 @@ def preprocess_dataset(
     dataset: list, window_size: int = WINDOW_SIZE, step_size: int = STEP_SIZE
 ) -> list:
     """
-    Convert full SEED dataset into windowed ML-ready format.
+    Preprocess entire SEED EEG dataset into windowed ML-ready format.
 
-    INPUT FORMAT:
-        [
+    Converts variable-length raw EEG trials from all subjects into
+    fixed-length windows with preserved metadata (subject, trial, label).
+
+    Parameters
+    ----------
+    dataset : list
+        Raw SEED dataset, each element contains:
             {
-                "signal": (62, T),
+                "signal": np.ndarray (62, T),
                 "label": int,
                 "subject": int,
                 "trial": int
             }
-        ]
+    window_size : int, optional
+        Size of each window in samples, by default WINDOW_SIZE
+    step_size : int, optional
+        Step size between windows (controls overlap), by default STEP_SIZE
 
-    OUTPUT FORMAT:
-        [
+    Returns
+    -------
+    list
+        Preprocessed dataset, each element contains:
             {
-                "windows": (N, 62, W),
-                "label": int,
+                "windows": np.ndarray (n_windows, 62, window_size),
+                "label": int (remapped: 0/1/2),
                 "subject": int,
                 "trial": int
             }
-        ]
+
+    Notes
+    -----
+    Label remapping: SEED labels (-1, 0, 1) → class indices (0, 1, 2)
     """
 
     logger.info("Starting EEG preprocessing pipeline...")
