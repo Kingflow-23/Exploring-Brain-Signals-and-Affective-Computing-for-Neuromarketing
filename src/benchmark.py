@@ -11,7 +11,6 @@ from seed_loader import build_seed_dataset
 from preprocessing import preprocess_dataset
 from feature_extraction import extract_dataset_features
 
-from train_deep_models import EEGDataset
 from torch.utils.data import DataLoader
 
 from collections import Counter, defaultdict
@@ -45,27 +44,31 @@ logger = logging.getLogger("BENCHMARK_INFER")
 
 def load_test_data():
     """
-    Load and preprocess held-out EEG test dataset.
+    Load raw EEG test dataset from dedicated test folder.
+
+    Loads the held-out SEED dataset that has been physically separated
+    from training data to prevent subject leakage.
 
     Pipeline:
-        1. Load raw EEG recordings from dedicated test folder
-        2. Reconstruct original data structure (subjects, trials, labels)
-
-    IMPORTANT:
-        This function assumes the dataset has already been split
-        physically on disk to avoid any subject leakage.
+        1. Locate test dataset directory
+        2. Load raw EEG recordings with labels
+        3. Return reconstructed data structure
 
     Returns
     -------
     list
-        List of preprocessed EEG samples:
-            [
-                {
-                    "subject": int,
-                    "trial": int,
-                    "label": int,
-                    "windows": list of np.array
-                },
+        List of raw EEG samples, each containing:
+            {
+                "signal": np.ndarray (62, T),
+                "label": int,
+                "subject": int,
+                "trial": int
+            }
+
+    Notes
+    -----
+    Assumes the dataset has already been split physically on disk
+    to avoid any subject leakage between train and test sets.
     """
     test_path = os.path.join(DATASET_DIR, "test")
     logger.info(f"Loading test set from {test_path}")
@@ -76,20 +79,75 @@ def load_test_data():
 
 
 def prepare_ml_data(raw):
+    """
+    Preprocess raw EEG data for classical ML models.
+
+    Parameters
+    ----------
+    raw : list
+        Raw EEG dataset from build_seed_dataset()
+
+    Returns
+    -------
+    list
+        Preprocessed dataset with windowed EEG signals ready for
+        classical ML feature extraction.
+    """
     return preprocess_dataset(raw, window_size=ML_WINDOW_SIZE, step_size=ML_STEP_SIZE)
 
 
 def prepare_dl_data(raw):
+    """
+    Preprocess raw EEG data for deep learning models.
+
+    Parameters
+    ----------
+    raw : list
+        Raw EEG dataset from build_seed_dataset()
+
+    Returns
+    -------
+    list
+        Preprocessed dataset with windowed EEG signals ready for
+        deep neural network training and inference.
+    """
     return preprocess_dataset(raw, window_size=WINDOW_SIZE, step_size=STEP_SIZE)
 
 
 def prepare_llm_data(raw):
+    """
+    Preprocess raw EEG data for LLM-based emotion inference.
+
+    Parameters
+    ----------
+    raw : list
+        Raw EEG dataset from build_seed_dataset()
+
+    Returns
+    -------
+    list
+        Preprocessed dataset with windowed EEG signals ready for
+        feature extraction and LLM prompt generation.
+    """
     return preprocess_dataset(raw, window_size=LLM_WINDOW_SIZE, step_size=LLM_STEP_SIZE)
 
 
 def majority_vote(predictions):
     """
-    Majority voting over window predictions.
+    Aggregate window-level predictions to trial level via majority vote.
+
+    Takes a list of window-level emotion predictions and returns the
+    most common class, representing the emotion for the entire trial.
+
+    Parameters
+    ----------
+    predictions : list
+        List of integer class predictions (0=negative, 1=neutral, 2=positive)
+
+    Returns
+    -------
+    int or None
+        Most common prediction class, or None if predictions list is empty.
     """
 
     if len(predictions) == 0:
@@ -100,7 +158,22 @@ def majority_vote(predictions):
 
 def build_metrics(y_true, y_pred):
     """
-    Standard metric bundle.
+    Compute standard classification metrics for evaluation.
+
+    Parameters
+    ----------
+    y_true : array-like
+        True emotion labels
+    y_pred : array-like
+        Predicted emotion labels
+
+    Returns
+    -------
+    dict
+        Benchmark metrics containing:
+            - acc: Accuracy (fraction of correct predictions)
+            - f1: Macro-averaged F1 score
+            - cm: Confusion matrix as nested list
     """
 
     return {
@@ -350,6 +423,10 @@ def run_dl_inference(processed_test, model_dir, device):
 
         def __getitem__(self, idx):
             x, y, subj, tid = self.samples[idx]
+
+            x = torch.tensor(x, dtype=torch.float32)
+            x = x.unsqueeze(0)  # Add channel dimension for CNNs
+
             return x, y, tid
 
     loader = DataLoader(TrialEEGDataset(samples), batch_size=64, shuffle=False)
@@ -390,7 +467,7 @@ def run_dl_inference(processed_test, model_dir, device):
 
             for xb, yb, tids in loader:
 
-                xb = xb.to(device)
+                xb = xb.to(device).float()
 
                 if input_mode == "eeg_4d":
                     out = model(xb)
@@ -515,6 +592,13 @@ def run_llm_inference(processed_test):
 
             feats = extract_eeg_features(window)
             prompt = build_eeg_prompt(feats)
+
+            """
+            print(
+                f"Prompt for subject {sample['subject']} trial {sample['trial']}:\n{prompt}\n"
+            )
+            """
+
             pred = client.generate(prompt)
 
             # Handle invalid predictions by defaulting to neutral (label 1)
@@ -609,9 +693,14 @@ def run_benchmark():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    ml_results = run_ml_inference(ml_data)
-    dl_results = run_dl_inference(dl_data, MODEL_DIR, device)
     llm_results = run_llm_inference(llm_data)
+    print(f"LLM benchmark completed. results: {llm_results}")
+
+    ml_results = run_ml_inference(ml_data)
+    print(f"ML benchmark completed. results: {ml_results}")
+
+    dl_results = run_dl_inference(dl_data, MODEL_DIR, device)
+    print(f"DL benchmark completed. results: {dl_results}")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
