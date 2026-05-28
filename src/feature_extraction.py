@@ -20,130 +20,9 @@ import logging
 import numpy as np
 
 from scipy.signal import butter, filtfilt, welch
+from config import FS, NYQ, ORDER, BANDS, PAIR_INDICES
 
 logger = logging.getLogger("EEG_FEATURES")
-
-# =============================================================================
-# SAMPLING CONFIG
-# =============================================================================
-
-FS = 200
-NYQ = FS / 2
-ORDER = 5
-
-BANDS = {
-    "theta": (4, 8),
-    "alpha": (8, 13),
-    "beta": (13, 30),
-    "gamma": (30, 45),
-}
-
-# =============================================================================
-# CANONICAL SEED CHANNEL MONTAGE
-# =============================================================================
-
-CHANNELS = [
-    "FP1",
-    "FPZ",
-    "FP2",
-    "AF3",
-    "AF4",
-    "F7",
-    "F5",
-    "F3",
-    "F1",
-    "FZ",
-    "F2",
-    "F4",
-    "F6",
-    "F8",
-    "FT7",
-    "FC5",
-    "FC3",
-    "FC1",
-    "FCZ",
-    "FC2",
-    "FC4",
-    "FC6",
-    "FT8",
-    "T7",
-    "C5",
-    "C3",
-    "C1",
-    "CZ",
-    "C2",
-    "C4",
-    "C6",
-    "T8",
-    "TP7",
-    "CP5",
-    "CP3",
-    "CP1",
-    "CPZ",
-    "CP2",
-    "CP4",
-    "CP6",
-    "TP8",
-    "P7",
-    "P5",
-    "P3",
-    "P1",
-    "PZ",
-    "P2",
-    "P4",
-    "P6",
-    "P8",
-    "PO7",
-    "PO5",
-    "PO3",
-    "POZ",
-    "PO4",
-    "PO6",
-    "PO8",
-    "CB1",
-    "O1",
-    "OZ",
-    "O2",
-    "CB2",
-]
-
-CHANNEL_INDEX = {ch: i for i, ch in enumerate(CHANNELS)}
-
-# =============================================================================
-# LEFT-RIGHT PAIRS (ANATOMICAL SYMMETRY)
-# =============================================================================
-
-LEFT_RIGHT_PAIRS = [
-    ("FP1", "FP2"),
-    ("AF3", "AF4"),
-    ("F7", "F8"),
-    ("F5", "F6"),
-    ("F3", "F4"),
-    ("F1", "F2"),
-    ("FC5", "FC6"),
-    ("FC3", "FC4"),
-    ("FC1", "FC2"),
-    ("FT7", "FT8"),
-    ("T7", "T8"),
-    ("C5", "C6"),
-    ("C3", "C4"),
-    ("C1", "C2"),
-    ("CP5", "CP6"),
-    ("CP3", "CP4"),
-    ("CP1", "CP2"),
-    ("TP7", "TP8"),
-    ("P7", "P8"),
-    ("P5", "P6"),
-    ("P3", "P4"),
-    ("P1", "P2"),
-    ("PO7", "PO8"),
-    ("PO5", "PO6"),
-    ("PO3", "PO4"),
-    ("CB1", "CB2"),
-    ("O1", "O2"),
-]
-
-PAIR_INDICES = [(CHANNEL_INDEX[l], CHANNEL_INDEX[r]) for l, r in LEFT_RIGHT_PAIRS]
 
 # =============================================================================
 # FILTERS
@@ -168,20 +47,65 @@ FILTERS = create_band_filters()
 
 
 def bandpass_filter(signal: np.ndarray, band: str) -> np.ndarray:
+    """
+    Apply bandpass filter to EEG signal for a specific frequency band.
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        EEG data with shape (n_channels, n_samples)
+    band : str
+        Frequency band name: 'theta', 'alpha', 'beta', or 'gamma'
+
+    Returns
+    -------
+    np.ndarray
+        Filtered signal with same shape as input
+    """
     b, a = FILTERS[band]
     return filtfilt(b, a, signal, axis=1)
 
 
 def compute_de(signal: np.ndarray, eps: float = 1e-8) -> np.ndarray:
-    """Differential entropy per channel."""
+    """
+    Compute Differential Entropy (DE) per EEG channel.
+
+    Differential entropy is a measure of signal complexity and is correlated
+    with emotional states in EEG signals.
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        EEG data with shape (n_channels, n_samples)
+    eps : float, optional
+        Small constant for numerical stability, by default 1e-8
+
+    Returns
+    -------
+    np.ndarray
+        DE values per channel, shape (n_channels,)
+    """
     var = np.var(signal, axis=1)
     return (0.5 * np.log(2 * np.pi * np.e * (var + eps))).astype(np.float32)
 
 
 def compute_psd(signal: np.ndarray) -> np.ndarray:
     """
-    Band-compressed PSD (robust global spectral descriptor).
-    Output: (4,)
+    Compute band-compressed Power Spectral Density (PSD).
+
+    Computes average PSD across all channels within each frequency band
+    (theta, alpha, beta, gamma) to create a 4-dimensional global spectral descriptor.
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        EEG data with shape (n_channels, n_samples)
+
+    Returns
+    -------
+    np.ndarray
+        PSD values per band, shape (4,) corresponding to
+        [theta_psd, alpha_psd, beta_psd, gamma_psd]
     """
     per_channel = []
 
@@ -201,7 +125,22 @@ def compute_psd(signal: np.ndarray) -> np.ndarray:
 
 
 def compute_bandpower(window: np.ndarray) -> np.ndarray:
-    """(62 × 4) bandpower features flattened."""
+    """
+    Compute log bandpower features across all EEG channels and bands.
+
+    Extracts bandpower (log-transformed) in theta, alpha, beta, and gamma bands
+    for all 62 EEG channels, resulting in 248 features (62 channels × 4 bands).
+
+    Parameters
+    ----------
+    window : np.ndarray
+        EEG window with shape (62, window_size)
+
+    Returns
+    -------
+    np.ndarray
+        Bandpower features, shape (248,) representing all channel-band pairs
+    """
     feats = []
 
     for band in BANDS:
@@ -213,12 +152,44 @@ def compute_bandpower(window: np.ndarray) -> np.ndarray:
 
 
 def compute_dasm(de: np.ndarray) -> np.ndarray:
-    """Left-right difference asymmetry."""
+    """
+    Compute Differential Asymmetry (DASM) features.
+
+    DASM measures left-right hemisphere differences in differential entropy.
+    Used as a biomarker for emotional valence assessment.
+
+    Parameters
+    ----------
+    de : np.ndarray
+        Differential entropy per channel, shape (62,)
+
+    Returns
+    -------
+    np.ndarray
+        DASM values for each anatomical pair, shape (30,)
+    """
     return np.asarray([de[l] - de[r] for l, r in PAIR_INDICES], dtype=np.float32)
 
 
 def compute_rasm(de: np.ndarray, eps: float = 1e-8) -> np.ndarray:
-    """Left-right ratio asymmetry."""
+    """
+    Compute Relative Asymmetry (RASM) features.
+
+    RASM is a normalized version of DASM that is more robust to baseline shifts.
+    Measures the relative balance between left and right hemisphere activity.
+
+    Parameters
+    ----------
+    de : np.ndarray
+        Differential entropy per channel, shape (62,)
+    eps : float, optional
+        Small constant for numerical stability, by default 1e-8
+
+    Returns
+    -------
+    np.ndarray
+        RASM values for each anatomical pair, shape (30,)
+    """
     return np.asarray(
         [de[l] / (de[r] + eps) for l, r in PAIR_INDICES], dtype=np.float32
     )
@@ -231,13 +202,26 @@ def compute_rasm(de: np.ndarray, eps: float = 1e-8) -> np.ndarray:
 
 def extract_features(window: np.ndarray) -> np.ndarray:
     """
-    Convert EEG window → feature vector.
+    Extract comprehensive handcrafted feature vector from EEG window.
 
-    Input:
-        (62, W)
+    Combines multiple feature types for classical ML models:
+    1. Bandpower: Log-transformed power in 4 bands × 62 channels (248 dims)
+    2. Differential Entropy (DE): Signal complexity per channel (62 dims)
+    3. Power Spectral Density (PSD): Global spectral descriptor (4 dims)
+    4. Differential Asymmetry (DASM): Left-right difference (30 dims)
+    5. Relative Asymmetry (RASM): Left-right ratio (30 dims)
 
-    Output:
-        (F,)
+    Total: ~374 features per window
+
+    Parameters
+    ----------
+    window : np.ndarray
+        EEG window with shape (62, window_size)
+
+    Returns
+    -------
+    np.ndarray
+        Feature vector with shape (~374,)
     """
 
     features = []
@@ -266,9 +250,29 @@ def extract_features(window: np.ndarray) -> np.ndarray:
 
 def extract_dataset_features(processed_dataset):
     """
-    Convert full dataset into ML-ready arrays.
+    Convert preprocessed EEG dataset into ML-ready feature matrix.
 
-    Each window becomes one training sample.
+    Processes all windows in the dataset through the feature extraction pipeline
+    to create feature vectors compatible with classical ML models.
+
+    Parameters
+    ----------
+    processed_dataset : list
+        List of preprocessed samples, each containing:
+            {
+                "windows": list of np.ndarray,
+                "label": int,
+                "subject": int,
+                "trial": int
+            }
+
+    Returns
+    -------
+    tuple
+        (X, y, groups) where:
+            - X: Feature matrix, shape (n_samples, ~374)
+            - y: Labels, shape (n_samples,)
+            - groups: Subject IDs for group-aware cross-validation
     """
 
     logger.info("Extracting EEG features...")
