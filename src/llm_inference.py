@@ -28,7 +28,13 @@ import numpy as np
 import requests
 
 from scipy.signal import welch
-from config import DEFAULT_FS, ALLOWED_LABELS, DEFAULT_MODEL
+from config import (
+    DEFAULT_FS,
+    ALLOWED_LABELS,
+    DEFAULT_MODEL,
+    PAIR_INDICES,
+    FRONTAL_PAIRS_IDX,
+)
 
 # =============================================================================
 # EEG FEATURE EXTRACTION
@@ -83,6 +89,33 @@ def compute_bandpower(
     return float(np.trapezoid(psd[mask], freqs[mask]))
 
 
+def compute_faa(signal, fs, pair_indices):
+    """
+    Frontal Alpha Asymmetry (FAA)
+
+    Idea:
+    FAA = log(left_alpha_power) - log(right_alpha_power)
+
+    Positive FAA → more left activity → positive valence
+    Negative FAA → right dominance → negative valence
+    """
+
+    faa_values = []
+
+    for left_i, right_i in pair_indices:
+
+        left = signal[left_i]
+        right = signal[right_i]
+
+        left_alpha = compute_bandpower(left, fs, 8, 13)
+        right_alpha = compute_bandpower(right, fs, 8, 13)
+
+        faa = np.log(left_alpha + 1e-8) - np.log(right_alpha + 1e-8)
+        faa_values.append(faa)
+
+    return float(np.mean(faa_values))
+
+
 def extract_eeg_features(
     signal: np.ndarray,
     fs: int = DEFAULT_FS,
@@ -101,22 +134,10 @@ def extract_eeg_features(
 
     signal = signal.astype(np.float32)
 
-    # -------------------------------------------------------------------------
-    # Global statistics
-    # -------------------------------------------------------------------------
-    mean_val = float(np.mean(signal))
-    std_val = float(np.std(signal))
-    max_val = float(np.max(signal))
-    min_val = float(np.min(signal))
-    energy = float(np.mean(signal**2))
-
-    # -------------------------------------------------------------------------
-    # Compute average bandpower across channels
-    # -------------------------------------------------------------------------
-    theta_vals = []
-    alpha_vals = []
-    beta_vals = []
-    gamma_vals = []
+    # =====================================================
+    # BANDPOWER
+    # =====================================================
+    theta_vals, alpha_vals, beta_vals, gamma_vals = [], [], [], []
 
     for ch in signal:
         theta_vals.append(compute_bandpower(ch, fs, 4, 8))
@@ -131,54 +152,39 @@ def extract_eeg_features(
 
     total = theta + alpha + beta + gamma + 1e-8
 
-    # -------------------------------------------------------------------------
-    # Relative powers
-    # -------------------------------------------------------------------------
     theta_ratio = theta / total
     alpha_ratio = alpha / total
     beta_ratio = beta / total
     gamma_ratio = gamma / total
 
-    # -------------------------------------------------------------------------
-    # Dominant band (for interpretability)
-    # -------------------------------------------------------------------------
+    # =====================================================
+    # SIMPLE GLOBAL ACTIVITY
+    # =====================================================
+    activity = float(np.std(signal))
 
-    dominant_band = max(
-        {
-            "theta": theta_ratio,
-            "alpha": alpha_ratio,
-            "beta": beta_ratio,
-            "gamma": gamma_ratio,
-        },
-        key=lambda k: {
-            "theta": theta_ratio,
-            "alpha": alpha_ratio,
-            "beta": beta_ratio,
-            "gamma": gamma_ratio,
-        }[k],
-    )
+    # =====================================================
+    # ENTROPY (COMPLEXITY)
+    # =====================================================
+    prob = np.abs(signal)
+    prob = prob / (np.sum(prob) + 1e-8)
+    entropy = float(-np.sum(prob * np.log(prob + 1e-8)))
 
-    # -------------------------------------------------------------------------
-    # Hjorth activity proxy
-    # -------------------------------------------------------------------------
-    activity = float(np.var(signal))
+    # =====================================================
+    # FAA (ONLY FINAL VALENCE SCORE)
+    # =====================================================
+    faa_valence_index = compute_faa(signal, fs, PAIR_INDICES)
 
     return {
-        "mean": mean_val,
-        "std": std_val,
-        "max": max_val,
-        "min": min_val,
-        "energy": energy,
-        "theta_power": theta,
-        "alpha_power": alpha,
-        "beta_power": beta,
-        "gamma_power": gamma,
+        # spectral
         "theta_ratio": theta_ratio,
         "alpha_ratio": alpha_ratio,
         "beta_ratio": beta_ratio,
         "gamma_ratio": gamma_ratio,
-        "dominant_band": dominant_band,
+        # simple dynamics
         "activity": activity,
+        "entropy": entropy,
+        # valence
+        "faa": faa_valence_index,
     }
 
 
@@ -197,128 +203,89 @@ def build_eeg_prompt(features: dict) -> str:
     """
 
     return f"""
-You are an expert EEG emotion recognition system.
+You are an EEG emotion classification system.
 
-You classify emotional valence from EEG-derived neuroscience features.
+Your task is to classify emotional state from EEG spectral features.
 
-Classification rules:
+You MUST choose exactly one label:
+positive, neutral, negative
 
-High alpha activity indicates calmness or positive affect
-High beta activity indicates arousal, stress, or cognitive activation
-High theta activity indicate fatigue, negative affect, or emotional load
-High gamma activity indicate intense engagement or positive stimulation
+---
 
-Emotion labels:
+DECISION RULES:
 
-positive:
+1. POSITIVE emotion:
+- alpha_ratio is relatively elevated OR balanced with gamma
+- beta_ratio is not excessively dominant
+- FAA may support left frontal dominance
 
-- alpha_ratio clearly exceeds theta_ratio and beta_ratio
-- gamma_ratio may also be elevated
-- activity variance tends to remain moderate
+2. NEGATIVE emotion:
+- theta_ratio is dominant OR beta_ratio is elevated together with high arousal
+- alpha_ratio is relatively low
+- FAA may support right frontal dominance
+- high activity or entropy may indicate emotional arousal
 
-negative:
+3. NEUTRAL emotion:
+- spectral ratios are relatively balanced
+- no strong emotional signature appears
+- FAA is weak or inconsistent
+- no feature strongly supports positive or negative emotion
 
-- alpha_ratio clearly exceeds theta_ratio and beta_ratio
-- gamma_ratio may also be elevated
-- activity variance tends to remain moderate
+---
 
-neutral:
+FEATURES:
 
-- no frequency band strongly dominates
-- alpha, beta, theta, and gamma remain relatively balanced
-- activity variance remains moderate
+Spectral:
+- theta: {features["theta_ratio"]:.4f}
+- alpha: {features["alpha_ratio"]:.4f}
+- beta: {features["beta_ratio"]:.4f}
+- gamma: {features["gamma_ratio"]:.4f}
 
-Global Signal:
-- Mean amplitude: {features["mean"]:.6f}
-- Standard deviation: {features["std"]:.6f}
-- Maximum amplitude: {features["max"]:.6f}
-- Minimum amplitude: {features["min"]:.6f}
-- Signal energy: {features["energy"]:.6f}
+Brain state:
+- activity: {features["activity"]:.4f}
+- entropy: {features["entropy"]:.4f}
 
-Frequency Features:
-- Theta ratio (4-8 Hz): {features["theta_ratio"]:.6f}
-- Alpha ratio (8-13 Hz): {features["alpha_ratio"]:.6f}
-- Beta ratio (13-30 Hz): {features["beta_ratio"]:.6f}
-- Gamma ratio (30-45 Hz): {features["gamma_ratio"]:.6f}
-- Dominant band: {features["dominant_band"]}
+Valence:
+- FAA (frontal asymmetry): {features["faa"]:.4f}
 
-Brain Dynamics:
-- Activity variance: {features["activity"]:.6f}
+---
+Dominant band is informative but should not override overall spectral balance.
 
-Task:
-Predict emotional state.
+FAA is a weak supportive signal.
+Strong spectral evidence should take priority over FAA.
 
-Allowed outputs ONLY:
-positive
-neutral
-negative
+Higher activity and entropy may indicate stronger emotional arousal.
+Moderate values are more common in neutral states.
 
-Examples:
+- positive FAA slightly supports positive emotion
+- negative FAA slightly supports negative emotion
+- FAA alone is insufficient for classification
 
-Example 1:
-Theta ratio: 0.12
-Alpha ratio: 0.46
-Beta ratio: 0.18
-Gamma ratio: 0.24
-Dominant band: alpha
-Activity variance: 0.61
-Label: positive
+Decision priority:
+1. overall spectral balance
+2. dominant emotional tendency
+3. FAA as secondary support
 
-Example 2:
-Theta ratio: 0.10
-Alpha ratio: 0.39
-Beta ratio: 0.17
-Gamma ratio: 0.34
-Dominant band: gamma
-Activity variance: 0.72
-Label: positive
+IMPORTANT:
 
-Example 3:
-Theta ratio: 0.31
-Alpha ratio: 0.11
-Beta ratio: 0.47
-Gamma ratio: 0.11
-Dominant band: beta
-Activity variance: 1.88
-Label: negative
+Do not classify emotion from a single feature alone.
 
-Example 4:
-Theta ratio: 0.42
-Alpha ratio: 0.09
-Beta ratio: 0.37
-Gamma ratio: 0.12
-Dominant band: theta
-Activity variance: 2.14
-Label: negative
+Use the overall relationship between:
+- spectral balance
+- dominant oscillations
+- FAA
+- activity
+- entropy
 
-Example 5:
-Theta ratio: 0.24
-Alpha ratio: 0.27
-Beta ratio: 0.29
-Gamma ratio: 0.20
-Dominant band: beta
-Activity variance: 0.97
-Label: neutral
+Neutral emotion is common when:
+- multiple bands are similar
+- FAA is weak
+- no strong arousal pattern appears
 
-Example 6:
-Theta ratio: 0.22
-Alpha ratio: 0.26
-Beta ratio: 0.25
-Gamma ratio: 0.27
-Dominant band: gamma
-Activity variance: 1.01
-Label: neutral
+---
 
-Example 7:
-Theta ratio: 0.27
-Alpha ratio: 0.24
-Beta ratio: 0.34
-Gamma ratio: 0.15
-Dominant band: beta
-Activity variance: 1.41
-Label: negative
-
-Respond with EXACTLY one word:
+OUTPUT FORMAT:
+Return ONLY one word:
 positive
 neutral
 negative
