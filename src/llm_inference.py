@@ -212,27 +212,6 @@ positive, neutral, negative
 
 ---
 
-DECISION RULES:
-
-1. POSITIVE emotion:
-- alpha_ratio is relatively elevated OR balanced with gamma
-- beta_ratio is not excessively dominant
-- FAA may support left frontal dominance
-
-2. NEGATIVE emotion:
-- theta_ratio is dominant OR beta_ratio is elevated together with high arousal
-- alpha_ratio is relatively low
-- FAA may support right frontal dominance
-- high activity or entropy may indicate emotional arousal
-
-3. NEUTRAL emotion:
-- spectral ratios are relatively balanced
-- no strong emotional signature appears
-- FAA is weak or inconsistent
-- no feature strongly supports positive or negative emotion
-
----
-
 FEATURES:
 
 Spectral:
@@ -249,38 +228,95 @@ Valence:
 - FAA (frontal asymmetry): {features["faa"]:.4f}
 
 ---
-Dominant band is informative but should not override overall spectral balance.
 
-FAA is a weak supportive signal.
-Strong spectral evidence should take priority over FAA.
+EEG BAND INTERPRETATION (context only):
 
-Higher activity and entropy may indicate stronger emotional arousal.
-Moderate values are more common in neutral states.
+- theta: drowsiness / internal cognition
+- alpha: relaxed wakefulness / calm state
+- beta: active cognition / attention / alertness
+- gamma: high cognitive integration / load
 
-- positive FAA slightly supports positive emotion
-- negative FAA slightly supports negative emotion
-- FAA alone is insufficient for classification
+These describe brain state only and do NOT determine emotion directly.
 
-Decision priority:
-1. overall spectral balance
-2. dominant emotional tendency
-3. FAA as secondary support
+---
 
-IMPORTANT:
+STEP 1 — VALENCE ESTIMATION (FAA ONLY)
 
-Do not classify emotion from a single feature alone.
+FAA defines emotional direction:
 
-Use the overall relationship between:
-- spectral balance
-- dominant oscillations
-- FAA
-- activity
-- entropy
+- FAA > +0.3 → positive valence
+- FAA < -0.3 → negative valence
+- otherwise → undecided
 
-Neutral emotion is common when:
-- multiple bands are similar
-- FAA is weak
-- no strong arousal pattern appears
+Store result as:
+VALENCE = positive / negative / undecided
+
+---
+
+STEP 2 — AROUSAL (CONTINUOUS CONFIDENCE SCALE)
+
+Compute:
+
+arousal_score =
+    (activity - 0.75) +
+    (entropy - 10.0)
+
+Clamp interpretation:
+
+- arousal_score < -0.3 → low arousal
+- -0.3 to 0.3 → medium arousal
+- > 0.3 → high arousal
+
+---
+
+STEP 3 — SPECTRAL CONTEXT (MODULATOR ONLY)
+
+Compute qualitative context:
+
+- beta/gamma dominant → engagement context
+- alpha dominant → relaxed context
+- theta dominant → disengaged context
+
+This ONLY adjusts confidence:
+
+- strong engagement → reinforces FAA decision
+- strong relaxation → pushes toward neutral if FAA is weak
+
+DO NOT convert spectral into votes.
+
+---
+
+STEP 4 — FINAL DECISION RULE
+
+CASE A:
+If |FAA| ≥ 0.15 AND arousal is medium or high:
+    → follow FAA direction (positive/negative)
+
+CASE B:
+If FAA is weak AND arousal is low:
+    → neutral
+
+CASE C:
+If FAA is weak AND spectral shows strong engagement:
+    → neutral (no clear valence signal)
+
+CASE D:
+If FAA and spectral strongly conflict:
+    → neutral
+
+CASE E:
+Otherwise:
+    → follow FAA direction with reduced confidence bias
+    
+---
+
+IMPORTANT RULES:
+
+- FAA is direction (valence axis)
+- arousal is confidence, NOT a gate
+- spectral is context only (never voting system)
+- neutral = uncertainty OR low emotional drive
+- no single feature dominates always
 
 ---
 
