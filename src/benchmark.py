@@ -591,6 +591,9 @@ def run_llm_inference(processed_test):
         for window in sample["windows"]:
 
             feats = extract_eeg_features(window)
+
+            print(feats)
+
             prompt = build_eeg_prompt(feats)
 
             """
@@ -600,6 +603,8 @@ def run_llm_inference(processed_test):
             """
 
             pred = client.generate(prompt)
+
+            print(f"Real label: {sample['label']}, LLM prediction: {pred}")
 
             # Handle invalid predictions by defaulting to neutral (label 1)
             if pred not in LABELS_MAPPER:
