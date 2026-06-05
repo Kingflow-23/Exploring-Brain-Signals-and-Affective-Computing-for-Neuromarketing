@@ -1,3 +1,43 @@
+"""
+Comprehensive Benchmarking and Inference Pipeline.
+
+End-to-end pipeline for evaluating all trained models on a held-out test set.
+
+Benchmark Scope:
+    - Classical ML Models: Logistic Regression, Random Forest, Extra Trees, XGBoost, SGD
+    - Deep Learning Models: EEGNet, Deep4Net, ShallowFBCSPNet, EEGConformer, LSTM, TCN, etc.
+    - LLM-based Inference: EEG feature extraction + LLM emotion prediction
+
+Evaluation Process:
+    1. Load held-out test dataset (no subject overlap with training)
+    2. Preprocess EEG data with appropriate window sizes
+    3. Load all trained model checkpoints
+    4. Run inference on test set
+    5. Compute metrics: accuracy, F1-score, confusion matrix
+    6. Generate benchmark report with timestamps
+    7. Save results to JSON for analysis and comparison
+
+Output Files:
+    - output/benchmark_inference_[timestamp].json: Complete benchmark results
+    - Includes per-model metrics, timing information, and confusion matrices
+
+Key Features:
+    - Reproducible test set evaluation
+    - Multiple preprocessing configurations (ML vs DL vs LLM)
+    - Comprehensive metrics computation
+    - Timestamped result tracking for result history
+    - GPU acceleration for deep learning models
+    - Detailed logging of inference process
+
+Results Saved:
+    - Overall accuracy per model
+    - F1-score (macro-averaged across classes)
+    - Per-class precision, recall, F1-score
+    - Confusion matrix (saved as numpy array)
+    - Inference time measurements
+    - Dataset statistics (class distribution)
+"""
+
 import os
 import json
 import torch

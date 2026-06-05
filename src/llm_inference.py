@@ -1,27 +1,35 @@
 """
 EEG to LLM Emotion Inference Pipeline.
 
-Bridges EEG signals to Large Language Models for emotion classification.
+Bridges EEG signals to Large Language Models for emotion classification through feature-based prompting.
 
 Pipeline:
     EEG Signal → Feature Extraction → Natural Language Prompt → LLM → Emotion Label
 
 Key Features:
-    - Extracts neuroscience-relevant EEG features (bandpower, ratios, entropy)
+    - Extracts neuroscience-relevant EEG features (bandpower, entropy, asymmetry)
     - Converts features into human-readable text prompts
-    - Queries local LM Studio LLM for emotion prediction
+    - Queries local LLM services for emotion prediction via REST API
     - Supports emotion labels: positive, neutral, negative
+    - Deterministic and reproducible feature extraction
 
 Design:
-    - Uses EEG-specific features rather than raw statistics
-    - Compatible with local LLM inference (LM Studio)
-    - Deterministic feature extraction for reproducibility
-    - Semantic understanding of EEG patterns through language models
+    - Uses domain-specific EEG features for better semantic understanding
+    - Compatible with local LLM inference services (e.g., Ollama, LM Studio)
+    - Maintains reproducibility through fixed channel order and feature extraction
+    - Leverages LLM semantic understanding of neuroscience concepts
 
 Input:
     EEG signal of shape (62, T) where:
-        62 = EEG channels (SEED montage)
-        T  = time samples
+        62 = EEG channels (SEED 10-20 montage)
+        T  = time samples at 200 Hz sampling rate
+
+Output:
+    Predicted emotion label: 'positive', 'neutral', or 'negative'
+
+Dependencies:
+    - Local LLM service must be running and accessible via REST API
+    - Tested with local inference servers supporting OpenAI-compatible API
 """
 
 import numpy as np

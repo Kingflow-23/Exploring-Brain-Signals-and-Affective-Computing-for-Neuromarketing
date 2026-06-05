@@ -3,12 +3,21 @@ Project Configuration Module.
 
 Central configuration for all EEG processing, model training, and inference tasks.
 
-Includes:
-    - Dataset paths and loading parameters
-    - Preprocessing window and step configurations
-    - Label mappings for emotion classification
+Contains:
+    - Dataset paths and directory structure
+    - EEG preprocessing parameters (window sizes, step sizes)
+    - Channel montage and anatomical pair definitions
+    - Frequency band definitions and filter parameters
+    - Label mappings and class definitions
     - ML/DL model training hyperparameters
-    - Random seed for reproducibility
+    - Sampling rate and filter specifications
+    - Random seed for reproducibility across runs
+
+Modification Notes:
+    - Do not modify CHANNELS list unless working with different EEG systems
+    - LABELS_MAP maps SEED emotion labels (-1, 0, 1) to class indices (0, 1, 2)
+    - WINDOW_SIZE affects both memory and temporal granularity
+    - TEST_SIZE controls train/test split ratio
 """
 
 from pathlib import Path
