@@ -193,6 +193,7 @@ def preprocess_dataset(
                 "label": LABELS_MAP[sample["label"]],
                 "subject": sample["subject"],
                 "trial": sample["trial"],
+                "rep": sample["rep"],
             }
         )
 
