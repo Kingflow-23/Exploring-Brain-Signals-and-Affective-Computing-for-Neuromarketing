@@ -1,19 +1,35 @@
 """
 EEG Feature Extraction Module for SEED Dataset.
 
-Extracts deterministic feature vectors from EEG windows for classical ML models.
+Extracts deterministic, neuroscience-grounded features from EEG windows for classical ML models.
 
-Key Features Extracted:
-    - Bandpower in frequency bands (theta, alpha, beta, gamma)
-    - Differential Entropy (DE) per channel
-    - Band-compressed Power Spectral Density (PSD)
-    - Asymmetry features (DASM/RASM) using anatomical channel pairs
+Extracted Features (per window):
+    1. Bandpower (248 features): Log-power in theta, alpha, beta, gamma for all 62 channels
+    2. Differential Entropy (62 features): Signal complexity per channel
+    3. Power Spectral Density (4 features): Average band power across all channels
+    4. Differential Asymmetry (30 features): Left-right hemisphere differences in entropy
+    5. Relative Asymmetry (30 features): Normalized asymmetry ratios
 
-Design:
-    - Deterministic: same input window always produces same features
-    - Canonical channel order: fixed to SEED montage (62 channels)
-    - Compatible across training, validation, and inference
-    - No external metadata required at inference time
+Total Features: 374 per window
+
+Design Philosophy:
+    - Deterministic: Identical input always produces identical output (no randomness)
+    - Neuroscience-grounded: Features based on emotion recognition literature
+    - SEED-compliant: Fixed channel order matching SEED 10-20 montage
+    - Inference-ready: No metadata requirements at inference time
+    - Fast computation: Suitable for real-time applications
+
+Emotion Relevance:
+    - Alpha power/asymmetry: Valence (positive/negative arousal)
+    - Frontal asymmetry: Approach-avoidance motivation
+    - Theta/gamma activity: Engagement and cognitive load
+    - Cross-hemispheric differences: Emotional lateralization
+
+Channel Order:
+    Strict adherence to SEED 10-20 montage (62 channels) for consistency across models
+
+Input: EEG window shape (62, window_size)
+Output: Feature vector shape (374,)
 """
 
 import logging

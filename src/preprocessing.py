@@ -1,19 +1,32 @@
 """
 EEG Preprocessing Module for SEED Dataset.
 
-Transforms raw EEG trials into fixed-length windows for machine learning models.
+Transforms raw EEG trials into fixed-length windows for ML/DL models.
 
-Key Operations:
-    - Splits variable-length EEG trials into overlapping windows
-    - Applies optional z-score normalization
-    - Maintains metadata (subject, trial, label) for each window
-    - Outputs structured dataset format compatible with ML/DL pipelines
+Pipeline Operations:
+    1. Channel-wise z-score normalization (optional)
+    2. Sliding window segmentation with configurable overlap
+    3. Metadata preservation (subject ID, trial, label, session)
+    4. Label remapping to class indices
 
-Design Notes:
-    - SEED data is already filtered (0-75 Hz) and downsampled (200 Hz)
-    - No additional artifact removal is applied
-    - Windows can overlap (controlled by step_size parameter)
-    - Normalization is applied per-sample to maintain signal structure
+Key Design Decisions:
+    - SEED data is pre-processed (0-75 Hz filtered, 200 Hz sampled) → no additional filtering
+    - Overlapping windows increase dataset size and capture temporal dynamics
+    - Z-score normalization applied per-sample (across channels and time)
+    - Window size and overlap controlled via config.py parameters
+
+Input Format (from seed_loader):
+    List of dicts with keys: 'signal' (62 × T), 'label' (-1/0/1), 'subject', 'trial', 'rep'
+
+Output Format:
+    List of dicts with keys: 'windows' (n_windows × 62 × window_size), 'label' (0/1/2),
+                             'subject', 'trial', 'rep'
+
+Notes:
+    - Variable-length trials are segmented into fixed windows
+    - Label remapping: -1→0 (negative), 0→1 (neutral), 1→2 (positive)
+    - Normalization stabilizes training and prevents channel dominance
+    - No artifact removal or ICA → data preserved as-is
 """
 
 import numpy as np
