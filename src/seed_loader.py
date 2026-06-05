@@ -254,6 +254,10 @@ def build_seed_dataset(folder_path):
 
         try:
             samples = load_subject(file_path, labels, subject_id)
+
+            for s in samples:
+                s["rep"] = idx
+
             dataset.extend(samples)
 
         except Exception as e:
