@@ -400,10 +400,8 @@ def run_dl_inference(processed_test, model_dir, device):
         return {}
 
     samples = []
-    unique_trials = set()
 
     for s in processed_test:
-        unique_trials.add((s["subject"], s["trial"]))
 
         for w in s["windows"]:
 
