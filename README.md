@@ -145,7 +145,7 @@ The project primarily uses the SEED (Similarity Emotion Database) dataset, which
 
 ### Additional Datasets
 
-- **DEAP Dataset** (optional): For multimodal emotion recognition research
+- **DEAP Dataset** (optional): For multimodal emotion recognition research. It was not used for this project but another one that can be found **[here](https://github.com/vsx23733/AI-CLINIC)**
 
 ## Features
 
@@ -323,13 +323,12 @@ Run unit tests:
 pytest tests/ -v
 ```
 
-## License
-
-[Specify your license here]
-
 ## Authors
 
-- [Add contributors here]
+* **[Florian HOUNKPATIN](https://www.linkedin.com/in/florian-hounkpatin/)**
+* **[Noémi DOMBOU](https://www.linkedin.com/in/noemi-dombou/)**
+* **[Axel ONOBIONO](https://www.linkedin.com/in/axel-onobiono/)**
+* **[Ephraim KOSSONOU](https://www.linkedin.com/in/ephraïm-kossonou/)**
 
 ## Acknowledgments
 
