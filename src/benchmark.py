@@ -295,7 +295,7 @@ def run_ml_inference(processed_test):
 
                 X.append(feats)
                 y.append(sample["label"])
-                trial_ids.append(sample["trial"])
+                trial_ids.append((sample["subject"], sample["trial"], sample["rep"]))
 
         if not X:
             logger.warning(f"No features extracted for model {name}")
@@ -400,19 +400,14 @@ def run_dl_inference(processed_test, model_dir, device):
         return {}
 
     samples = []
+    unique_trials = set()
 
     for s in processed_test:
+        unique_trials.add((s["subject"], s["trial"]))
 
         for w in s["windows"]:
 
-            samples.append(
-                (
-                    w,
-                    s["label"],
-                    s["subject"],
-                    s["trial"],
-                )
-            )
+            samples.append((w, s["label"], s["subject"], s["trial"], s["rep"]))
 
     class TrialEEGDataset(torch.utils.data.Dataset):
         def __init__(self, samples):
@@ -422,12 +417,12 @@ def run_dl_inference(processed_test, model_dir, device):
             return len(self.samples)
 
         def __getitem__(self, idx):
-            x, y, subj, tid = self.samples[idx]
+            x, y, subj, tid, rep = self.samples[idx]
 
             x = torch.tensor(x, dtype=torch.float32)
             x = x.unsqueeze(0)  # Add channel dimension for CNNs
 
-            return x, y, tid
+            return x, y, subj, tid, rep
 
     loader = DataLoader(TrialEEGDataset(samples), batch_size=64, shuffle=False)
 
@@ -461,11 +456,11 @@ def run_dl_inference(processed_test, model_dir, device):
 
         preds = []
         targets = []
-        trial_ids = []
+        trial_keys = []
 
         with torch.no_grad():
 
-            for xb, yb, tids in loader:
+            for xb, yb, subjs, tids, reps in loader:
 
                 xb = xb.to(device).float()
 
@@ -478,7 +473,7 @@ def run_dl_inference(processed_test, model_dir, device):
 
                 preds.extend(pred.cpu().numpy())
                 targets.extend(yb.numpy())
-                trial_ids.extend(tids.numpy())
+                trial_keys.extend(list(zip(subjs.numpy(), tids.numpy(), reps.numpy())))
 
         if not preds:
             logger.warning(f"No predictions from model {model_name}")
@@ -497,18 +492,19 @@ def run_dl_inference(processed_test, model_dir, device):
         grouped_preds = defaultdict(list)
         grouped_targets = {}
 
-        for pred, target, tid in zip(preds, targets, trial_ids):
-            grouped_preds[tid].append(pred)
-            grouped_targets[tid] = target
+        for pred, target, key in zip(preds, targets, trial_keys):
+            grouped_preds[key].append(pred)
+            grouped_targets[key] = target
 
         trial_preds = []
         trial_targets = []
 
-        for tid in sorted(grouped_preds.keys()):
-            trial_pred = majority_vote(grouped_preds[tid])
+        for key in sorted(grouped_preds.keys()):
+            trial_pred = majority_vote(grouped_preds[key])
+
             if trial_pred is not None:
                 trial_preds.append(trial_pred)
-                trial_targets.append(grouped_targets[tid])
+                trial_targets.append(grouped_targets[key])
 
         if trial_preds:
             trial_metrics = build_metrics(trial_targets, trial_preds)
@@ -698,14 +694,14 @@ def run_benchmark():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    llm_results = run_llm_inference(llm_data)
-    print(f"LLM benchmark completed. results: {llm_results}")
-
     ml_results = run_ml_inference(ml_data)
-    print(f"ML benchmark completed. results: {ml_results}")
+    # print(f"ML benchmark completed. results: {ml_results}")
 
     dl_results = run_dl_inference(dl_data, MODEL_DIR, device)
-    print(f"DL benchmark completed. results: {dl_results}")
+    # print(f"DL benchmark completed. results: {dl_results}")
+
+    llm_results = run_llm_inference(llm_data)
+    # print(f"LLM benchmark completed. results: {llm_results}")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
