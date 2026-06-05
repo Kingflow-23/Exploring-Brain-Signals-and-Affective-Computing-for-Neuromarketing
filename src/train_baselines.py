@@ -1,19 +1,61 @@
 """
 Classical ML Baseline Training Pipeline for EEG Emotion Classification.
 
-Trains and evaluates traditional machine learning models for emotion recognition:
-    - Logistic Regression
-    - SGDClassifier
-    - Random Forest
-    - Extra Trees
-    - XGBoost
+Complete pipeline for training and evaluating traditional machine learning models on EEG data.
 
-Features:
-    - Subject-level train/test split (no subject leakage)
-    - Consistent feature extraction pipeline
-    - Comprehensive evaluation metrics
-    - Model persistence and checkpointing
-    - Cross-validation for robustness
+Supported Models:
+    - Logistic Regression: Simple linear classifier, baseline model
+    - SGDClassifier: Stochastic gradient descent, scalable linear model
+    - Random Forest: Ensemble of decision trees, handles non-linearity
+    - Extra Trees (Extremely Randomized Trees): Faster variant with more randomness
+    - XGBoost: Gradient boosted trees, high predictive power
+
+Training Pipeline:
+    1. Load SEED dataset with all subjects
+    2. Preprocess EEG into fixed-length windows
+    3. Extract deterministic features (374 features per window)
+    4. Subject-level train/test split (no subject data leakage)
+    5. Standardize features (zero mean, unit variance)
+    6. Train each model with cross-validation
+    7. Evaluate on held-out test set
+    8. Save model weights and metrics
+
+Key Features:
+    - No subject leakage: Subjects are split at dataset level, not window level
+    - Feature-based approach: Uses extracted EEG features, not raw signals
+    - Scikit-learn pipelines: Automatic feature scaling and model training
+    - Comprehensive metrics: Accuracy, F1-score, classification report, confusion matrix
+    - Model persistence: Trained models saved with joblib
+    - Reproducible: Fixed random state for all stochastic operations
+
+Features Used (374 total):
+    - Bandpower: 248 features (62 channels × 4 bands)
+    - Differential Entropy: 62 features (1 per channel)
+    - Power Spectral Density: 4 features (1 per band)
+    - Differential Asymmetry: 30 features (left-right differences)
+    - Relative Asymmetry: 30 features (normalized asymmetry)
+
+Input Data:
+    - Raw EEG: (62, variable_length) per trial
+    - Labels: {-1: negative, 0: neutral, 1: positive}
+    - Subjects: 15 individuals with 45 trials each (15 trials × 3 sessions)
+
+Output:
+    - Trained models: model/[model_name]/model.pkl
+    - Metrics: model/[model_name]/metrics.json
+    - Confusion matrix: model/[model_name]/confusion.npy
+
+Configuration (from config.py):
+    - TEST_SIZE: 0.2 (train/test split)
+    - RANDOM_STATE: 42 (reproducibility)
+    - WINDOW_SIZE: 450 samples (~2.25 seconds at 200 Hz)
+    - STEP_SIZE: 225 samples (50% overlap)
+
+Performance Expectations:
+    - Baseline: ~33% (random guessing for 3 classes)
+    - Simple models (Logistic): ~50-55%
+    - Ensemble models (Random Forest/XGBoost): ~60-70%
+    - Deep learning typically: ~70-85%
 """
 
 import os

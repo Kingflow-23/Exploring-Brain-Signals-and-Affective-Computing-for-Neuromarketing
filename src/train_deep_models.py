@@ -1,21 +1,56 @@
 """
-EEG Deep Learning Framework for SEED Dataset.
+EEG Deep Learning Training Framework for SEED Dataset.
 
-Trains and evaluates deep neural network models for EEG-based emotion classification.
+Complete pipeline for training and evaluating deep neural networks for emotion classification.
 
-Supports multiple architectures:
-    - CNN-based models (EEGNet, Deep4Net, ShallowFBCSPNet)
-    - RNN-based models (LSTM, GRU)
-    - Temporal Convolutional Networks (TCN)
-    - Hybrid models (CNN-LSTM, Attention mechanisms)
-    - Transformer-based models (EEGConformer)
+Supported Architectures:
+    EEG-Specific Models (via Braindecode):
+        - EEGNet: Compact CNN with depthwise-separable convolutions
+        - Deep4Net: Deep convolutional network for EEG
+        - ShallowFBCSPNet: Shallow network with common spatial patterns
+        - EEGConformer: Vision Transformer-inspired hybrid architecture
 
-Features:
-    - Subject-level train/test split (no subject leakage)
-    - Reproducible training with seed control
-    - GPU support with automatic device detection
-    - Checkpointing and model persistence
+    Custom Architectures:
+        - LSTM: Sequence-to-class RNN
+        - GRU: Gated recurrent unit with reduced parameters
+        - TCN: Temporal Convolutional Network with residual connections
+        - CNN-Attention: Convolutional + self-attention mechanism
+        - CNN-LSTM: Hybrid CNN feature extraction + LSTM sequence modeling
+
+Training Pipeline:
+    1. Load SEED dataset and build preprocessing pipeline
+    2. Subject-level train/test split (prevents subject leakage)
+    3. Create PyTorch DataLoader with batch processing
+    4. Initialize selected model architecture
+    5. Train with cross-entropy loss and Adam optimizer
+    6. Checkpoint best model on validation accuracy
+    7. Evaluate on held-out test set
+    8. Log metrics (accuracy, F1, confusion matrix)
+
+Key Features:
+    - Reproducible training via seed control (random, numpy, torch, CUDA)
+    - GPU auto-detection with CPU fallback
+    - Cross-entropy loss for 3-class classification
+    - No subject data in test set (proper generalization assessment)
+    - Model checkpointing (saves best weights)
     - Comprehensive logging and progress tracking
+    - Balanced evaluation across emotion classes
+
+Input Data:
+    EEG windows: (batch_size, 1, 62_channels, window_size)
+    Labels: (batch_size,) with values in {0=negative, 1=neutral, 2=positive}
+
+Configuration Parameters (from config.py):
+    - BATCH_SIZE: 64 (batch size for training)
+    - N_EPOCHS: 50 (maximum training epochs)
+    - RANDOM_STATE: 42 (reproducibility seed)
+    - TEST_SIZE: 0.2 (train/test split ratio)
+    - WINDOW_SIZE: 450 (time samples per window at 200 Hz)
+
+Output:
+    - Trained model weights saved to model/deep_experiment/
+    - Training metrics and logs in console
+    - Best model selected based on validation accuracy
 """
 
 import os

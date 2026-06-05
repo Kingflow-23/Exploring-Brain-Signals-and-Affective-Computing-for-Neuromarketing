@@ -3,22 +3,36 @@ Model Registry Module.
 
 Central registry for all EEG deep learning models used in the project.
 
-Supported Models:
-    Custom Models:
-        - cnn_attention: CNN with Attention mechanism (4D input)
-        - cnn_lstm: CNN-LSTM hybrid (4D input)
-        - lstm: LSTM network (3D input)
-        - tcn: Temporal Convolutional Network (3D input)
+Unified interface for model instantiation, ensuring consistency across training and inference pipelines.
 
-    Braindecode Models:
+Supported Models:
+
+    Custom Architectures (3D input):
+        - lstm: LSTM (batch, seq_len, channels=62)
+        - tcn: Temporal Convolutional Network (batch, seq_len, channels=62)
+        - cnn_attention: CNN with attention mechanism (batch, 1, channels=62, seq_len)
+        - cnn_lstm: CNN-LSTM hybrid (batch, 1, channels=62, seq_len)
+
+    Braindecode Models (4D input):
         - eegnet: Lightweight EEG-specific CNN
         - deep4net: Deep convolutional network for EEG
-        - shallowconv: Shallow convolutional network for EEG
-        - eegconformer: Transformer-based EEG model
+        - shallowconv: Shallow convolutional network (ShallowFBCSPNet)
+        - eegconformer: Vision Transformer-inspired EEG model
 
-Input Modes:
-    - eeg_3d: (batch, channels, time)
-    - eeg_4d: (batch, 1, channels, time)
+Input Shapes:
+    - 3D input (LSTM, TCN): (batch_size, sequence_length, 62 channels)
+    - 4D input (CNN-based): (batch_size, 1 channel, 62 electrodes, sequence_length)
+
+Model Output:
+    All models output (batch_size, 3) logits for 3-class emotion classification
+
+Configuration:
+    - Window size: Configured in config.py (affects sequence length)
+    - Number of channels: 62 (SEED electrode montage)
+    - Number of classes: 3 (positive, neutral, negative)
+
+Usage:
+    model = get_model('eegnet', input_shape=(1, 62, 450), num_classes=3)
 """
 
 import torch.nn as nn
