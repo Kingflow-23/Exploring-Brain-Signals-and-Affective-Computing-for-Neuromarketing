@@ -170,7 +170,8 @@ def preprocess_dataset(
                 "signal": np.ndarray (62, T),
                 "label": int,
                 "subject": int,
-                "trial": int
+                "trial": int,
+                "rep": int
             }
     window_size : int, optional
         Size of each window in samples, by default WINDOW_SIZE
@@ -185,7 +186,8 @@ def preprocess_dataset(
                 "windows": np.ndarray (n_windows, 62, window_size),
                 "label": int (remapped: 0/1/2),
                 "subject": int,
-                "trial": int
+                "trial": int,
+                "rep": int
             }
 
     Notes
