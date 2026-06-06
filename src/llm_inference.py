@@ -8,16 +8,16 @@ Pipeline:
 
 Key Features:
     - Extracts neuroscience-relevant EEG features (bandpower, entropy, asymmetry)
-    - Converts features into human-readable text prompts
+    - Converts features into structured natural language prompts
     - Queries local LLM services for emotion prediction via REST API
     - Supports emotion labels: positive, neutral, negative
     - Deterministic and reproducible feature extraction
 
-Design:
-    - Uses domain-specific EEG features for better semantic understanding
-    - Compatible with local LLM inference services (e.g., Ollama, LM Studio)
-    - Maintains reproducibility through fixed channel order and feature extraction
-    - Leverages LLM semantic understanding of neuroscience concepts
+Design Philosophy:
+    - NO rule-based decision logic inside prompt
+    - LLM is responsible for multimodal integration
+    - Features are descriptive, not prescriptive
+    - Emphasis on neuroscience interpretability
 
 Input:
     EEG signal of shape (62, T) where:
@@ -26,66 +26,26 @@ Input:
 
 Output:
     Predicted emotion label: 'positive', 'neutral', or 'negative'
-
-Dependencies:
-    - Local LLM service must be running and accessible via REST API
-    - Tested with local inference servers supporting OpenAI-compatible API
 """
 
 import numpy as np
 import requests
 
 from scipy.signal import welch
+
 from config import (
     DEFAULT_FS,
     ALLOWED_LABELS,
     DEFAULT_MODEL,
-    PAIR_INDICES,
     FRONTAL_PAIRS_IDX,
 )
 
 # =============================================================================
-# EEG FEATURE EXTRACTION
+# BANDPOWER
 # =============================================================================
 
 
-def compute_bandpower(
-    signal_1d: np.ndarray,
-    fs: int,
-    low: float,
-    high: float,
-) -> float:
-    """
-    Compute spectral power inside a frequency band.
-
-    PARAMETERS
-    ----------
-    signal_1d : np.ndarray
-        Single EEG channel shape (T,)
-
-    fs : int
-        Sampling rate
-
-    low : float
-        Lower frequency bound
-
-    high : float
-        Upper frequency bound
-
-    RETURNS
-    -------
-    float
-        Integrated power in selected band
-
-    WHY THIS MATTERS
-    ----------------
-    Emotion-related EEG states often differ in band activity:
-
-    - alpha: calm / relaxation
-    - beta: attention / arousal
-    - theta: memory / engagement
-    - gamma: complex cognition
-    """
+def compute_bandpower(signal_1d: np.ndarray, fs: int, low: float, high: float) -> float:
 
     freqs, psd = welch(signal_1d, fs=fs, nperseg=min(256, len(signal_1d)))
 
@@ -97,20 +57,28 @@ def compute_bandpower(
     return float(np.trapezoid(psd[mask], freqs[mask]))
 
 
-def compute_faa(signal, fs, pair_indices):
+# =============================================================================
+# FAA (3 frontal asymmetry features)
+# =============================================================================
+
+
+def compute_faa(signal, fs, frontal_pairs_idx):
     """
-    Frontal Alpha Asymmetry (FAA)
-
-    Idea:
-    FAA = log(left_alpha_power) - log(right_alpha_power)
-
-    Positive FAA → more left activity → positive valence
-    Negative FAA → right dominance → negative valence
+    Compute 3 explicit frontal FAA features.
+    Order is now guaranteed by explicit mapping.
     """
 
-    faa_values = []
+    eps = 1e-8
 
-    for left_i, right_i in pair_indices:
+    FAA_KEYS = [
+        "faa_f3_f4",
+        "faa_f7_f8",
+        "faa_fp1_fp2",
+    ]
+
+    faa_vals = {}
+
+    for key, (left_i, right_i) in zip(FAA_KEYS, frontal_pairs_idx):
 
         left = signal[left_i]
         right = signal[right_i]
@@ -118,33 +86,22 @@ def compute_faa(signal, fs, pair_indices):
         left_alpha = compute_bandpower(left, fs, 8, 13)
         right_alpha = compute_bandpower(right, fs, 8, 13)
 
-        faa = np.log(left_alpha + 1e-8) - np.log(right_alpha + 1e-8)
-        faa_values.append(faa)
+        faa_vals[key] = np.log(left_alpha + eps) - np.log(right_alpha + eps)
 
-    return float(np.mean(faa_values))
+    return faa_vals
 
 
-def extract_eeg_features(
-    signal: np.ndarray,
-    fs: int = DEFAULT_FS,
-) -> dict:
-    """
-    Extract robust EEG summary features.
+# =============================================================================
+# FEATURE EXTRACTION (18-feature model)
+# =============================================================================
 
-    INPUT
-    -----
-    signal : (62, T)
 
-    RETURNS
-    -------
-    dict
-    """
-
+def extract_eeg_features(signal: np.ndarray, fs: int = DEFAULT_FS) -> dict:
     signal = signal.astype(np.float32)
 
-    # =====================================================
-    # BANDPOWER
-    # =====================================================
+    # -----------------------
+    # GLOBAL SPECTRAL STATE
+    # -----------------------
     theta_vals, alpha_vals, beta_vals, gamma_vals = [], [], [], []
 
     for ch in signal:
@@ -153,183 +110,176 @@ def extract_eeg_features(
         beta_vals.append(compute_bandpower(ch, fs, 13, 30))
         gamma_vals.append(compute_bandpower(ch, fs, 30, 45))
 
-    theta = float(np.mean(theta_vals))
-    alpha = float(np.mean(alpha_vals))
-    beta = float(np.mean(beta_vals))
-    gamma = float(np.mean(gamma_vals))
+    theta = np.mean(theta_vals)
+    alpha = np.mean(alpha_vals)
+    beta = np.mean(beta_vals)
+    gamma = np.mean(gamma_vals)
 
-    total = theta + alpha + beta + gamma + 1e-8
+    eps = 1e-8
+    total = theta + alpha + beta + gamma + eps
 
     theta_ratio = theta / total
     alpha_ratio = alpha / total
     beta_ratio = beta / total
     gamma_ratio = gamma / total
 
-    # =====================================================
-    # SIMPLE GLOBAL ACTIVITY
-    # =====================================================
+    # -----------------------
+    # REGIONAL FEATURES
+    # -----------------------
+    frontal = signal[:20]
+    temporal = signal[20:40]
+    occipital = signal[40:]
+
+    def region_band(region, low, high):
+        return np.mean([compute_bandpower(ch, fs, low, high) for ch in region])
+
+    frontal_alpha = region_band(frontal, 8, 13)
+    frontal_beta = region_band(frontal, 13, 30)
+    frontal_gamma = region_band(frontal, 30, 45)
+
+    temporal_alpha = region_band(temporal, 8, 13)
+    temporal_beta = region_band(temporal, 13, 30)
+
+    occipital_alpha = region_band(occipital, 8, 13)
+
+    # -----------------------
+    # FAA (3 features)
+    # -----------------------
+    faa_vals = compute_faa(signal, fs, FRONTAL_PAIRS_IDX)
+
+    # -----------------------
+    # COMPLEXITY
+    # -----------------------
     activity = float(np.std(signal))
 
-    # =====================================================
-    # ENTROPY (COMPLEXITY)
-    # =====================================================
-    prob = np.abs(signal)
-    prob = prob / (np.sum(prob) + 1e-8)
-    entropy = float(-np.sum(prob * np.log(prob + 1e-8)))
+    power = signal**2
+    prob = power / (np.sum(power) + eps)
+    entropy = -np.sum(prob * np.log(prob + eps))
 
-    # =====================================================
-    # FAA (ONLY FINAL VALENCE SCORE)
-    # =====================================================
-    faa_valence_index = compute_faa(signal, fs, PAIR_INDICES)
+    # -----------------------
+    # DERIVED RATIOS
+    # -----------------------
+    beta_alpha_ratio = beta / (alpha + eps)
+    gamma_beta_ratio = gamma / (beta + eps)
+    frontal_occipital_alpha_ratio = frontal_alpha / (occipital_alpha + eps)
 
     return {
-        # spectral
+        # global
         "theta_ratio": theta_ratio,
         "alpha_ratio": alpha_ratio,
         "beta_ratio": beta_ratio,
         "gamma_ratio": gamma_ratio,
-        # simple dynamics
+        # FAA (3)
+        **faa_vals,
+        # regional
+        "frontal_alpha": frontal_alpha,
+        "frontal_beta": frontal_beta,
+        "frontal_gamma": frontal_gamma,
+        "temporal_alpha": temporal_alpha,
+        "temporal_beta": temporal_beta,
+        "occipital_alpha": occipital_alpha,
+        # complexity
         "activity": activity,
         "entropy": entropy,
-        # valence
-        "faa": faa_valence_index,
+        # ratios
+        "beta_alpha_ratio": beta_alpha_ratio,
+        "gamma_beta_ratio": gamma_beta_ratio,
+        "frontal_occipital_alpha_ratio": frontal_occipital_alpha_ratio,
     }
 
 
 # =============================================================================
-# FEATURE → PROMPT
+# PROMPT (NO RULE ENGINE — PURE NEUROSCIENCE CONTEXT)
 # =============================================================================
 
 
 def build_eeg_prompt(features: dict) -> str:
-    """
-    Convert EEG features into an LLM-readable prompt.
-
-    WHY THIS WORKS
-    --------------
-    LLMs reason better from structured descriptions than raw vectors.
-    """
-
     return f"""
-You are an EEG emotion classification system.
+You are an EEG emotion classification expert.
 
-Your task is to classify emotional state from EEG spectral features.
+Your task is to classify emotional state into one of:
 
-You MUST choose exactly one label:
-positive, neutral, negative
+positive
+neutral
+negative
 
----
+You must use all features jointly.
 
-FEATURES:
+-----------------------
+EEG FEATURES
+-----------------------
 
-Spectral:
-- theta: {features["theta_ratio"]:.4f}
-- alpha: {features["alpha_ratio"]:.4f}
-- beta: {features["beta_ratio"]:.4f}
-- gamma: {features["gamma_ratio"]:.4f}
+Global spectral state:
+- theta_ratio = {features["theta_ratio"]:.4f}
+- alpha_ratio = {features["alpha_ratio"]:.4f}
+- beta_ratio  = {features["beta_ratio"]:.4f}
+- gamma_ratio = {features["gamma_ratio"]:.4f}
 
-Brain state:
-- activity: {features["activity"]:.4f}
-- entropy: {features["entropy"]:.4f}
+Frontal asymmetry:
+- FAA(Fp1-Fp2) = {features["faa_fp1_fp2"]:.4f}
+- FAA(F3-F4)   = {features["faa_f3_f4"]:.4f}
+- FAA(F7-F8)   = {features["faa_f7_f8"]:.4f}
 
-Valence:
-- FAA (frontal asymmetry): {features["faa"]:.4f}
+Regional activity:
+- frontal_alpha = {features["frontal_alpha"]:.4f}
+- frontal_beta  = {features["frontal_beta"]:.4f}
+- frontal_gamma = {features["frontal_gamma"]:.4f}
 
----
+- temporal_alpha = {features["temporal_alpha"]:.4f}
+- temporal_beta  = {features["temporal_beta"]:.4f}
 
-EEG BAND INTERPRETATION (context only):
+- occipital_alpha = {features["occipital_alpha"]:.4f}
 
-- theta: drowsiness / internal cognition
-- alpha: relaxed wakefulness / calm state
-- beta: active cognition / attention / alertness
-- gamma: high cognitive integration / load
+Complexity:
+- activity = {features["activity"]:.4f}
+- entropy  = {features["entropy"]:.4f}
 
-These describe brain state only and do NOT determine emotion directly.
+Derived ratios:
+- beta_alpha_ratio = {features["beta_alpha_ratio"]:.4f}
+- gamma_beta_ratio = {features["gamma_beta_ratio"]:.4f}
+- frontal_occipital_alpha_ratio = {features["frontal_occipital_alpha_ratio"]:.4f}
 
----
+-----------------------
+NEUROSCIENCE CONTEXT
+-----------------------
 
-STEP 1 — VALENCE ESTIMATION (FAA ONLY)
+Frontal asymmetry (FAA):
+- reflects hemispheric imbalance in affective processing
+- positive → left dominance (approach-related affect tendency)
+- negative → right dominance (withdrawal-related affect tendency)
+- magnitude reflects strength of lateralization
 
-FAA defines emotional direction:
+Spectral bands:
+- theta → internal processing / low vigilance
+- alpha → inhibition / relaxed wakefulness
+- beta → cognitive engagement / attention
+- gamma → integrative high-level processing
 
-- FAA > +0.3 → positive valence
-- FAA < -0.3 → negative valence
-- otherwise → undecided
+Regional activity:
+- frontal → emotional regulation and executive control
+- temporal → affective and semantic processing
+- occipital → visual baseline and relaxation state
 
-Store result as:
-VALENCE = positive / negative / undecided
+Derived ratios:
+- beta/alpha → cognitive engagement vs relaxation balance
+- gamma/beta → integrative processing load
+- frontal/occipital alpha → affective control vs baseline relaxation
 
----
+-----------------------
+INSTRUCTIONS
+-----------------------
 
-STEP 2 — AROUSAL (CONTINUOUS CONFIDENCE SCALE)
+- Integrate all features holistically
+- Do NOT apply fixed thresholds or rules
+- No feature alone determines the label
+- Allow uncertainty when signals conflict
+- Use FAA as important but not exclusive evidence
 
-Compute:
+-----------------------
+OUTPUT
+-----------------------
 
-arousal_score =
-    (activity - 0.75) +
-    (entropy - 10.0)
-
-Clamp interpretation:
-
-- arousal_score < -0.3 → low arousal
-- -0.3 to 0.3 → medium arousal
-- > 0.3 → high arousal
-
----
-
-STEP 3 — SPECTRAL CONTEXT (MODULATOR ONLY)
-
-Compute qualitative context:
-
-- beta/gamma dominant → engagement context
-- alpha dominant → relaxed context
-- theta dominant → disengaged context
-
-This ONLY adjusts confidence:
-
-- strong engagement → reinforces FAA decision
-- strong relaxation → pushes toward neutral if FAA is weak
-
-DO NOT convert spectral into votes.
-
----
-
-STEP 4 — FINAL DECISION RULE
-
-CASE A:
-If |FAA| ≥ 0.15 AND arousal is medium or high:
-    → follow FAA direction (positive/negative)
-
-CASE B:
-If FAA is weak AND arousal is low:
-    → neutral
-
-CASE C:
-If FAA is weak AND spectral shows strong engagement:
-    → neutral (no clear valence signal)
-
-CASE D:
-If FAA and spectral strongly conflict:
-    → neutral
-
-CASE E:
-Otherwise:
-    → follow FAA direction with reduced confidence bias
-    
----
-
-IMPORTANT RULES:
-
-- FAA is direction (valence axis)
-- arousal is confidence, NOT a gate
-- spectral is context only (never voting system)
-- neutral = uncertainty OR low emotional drive
-- no single feature dominates always
-
----
-
-OUTPUT FORMAT:
-Return ONLY one word:
+Return ONLY one label:
 positive
 neutral
 negative
