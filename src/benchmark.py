@@ -133,7 +133,9 @@ def prepare_ml_data(raw):
         Preprocessed dataset with windowed EEG signals ready for
         classical ML feature extraction.
     """
-    return preprocess_dataset(raw, window_size=ML_WINDOW_SIZE, step_size=ML_STEP_SIZE)
+    return preprocess_dataset(
+        raw, window_size=ML_WINDOW_SIZE, step_size=ML_STEP_SIZE, normalize=False
+    )
 
 
 def prepare_dl_data(raw):
@@ -169,7 +171,9 @@ def prepare_llm_data(raw):
         Preprocessed dataset with windowed EEG signals ready for
         feature extraction and LLM prompt generation.
     """
-    return preprocess_dataset(raw, window_size=LLM_WINDOW_SIZE, step_size=LLM_STEP_SIZE)
+    return preprocess_dataset(
+        raw, window_size=LLM_WINDOW_SIZE, step_size=LLM_STEP_SIZE, normalize=False
+    )
 
 
 def majority_vote(predictions):

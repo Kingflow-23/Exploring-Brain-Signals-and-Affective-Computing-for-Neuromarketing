@@ -151,7 +151,10 @@ def preprocess_trial(
 
 
 def preprocess_dataset(
-    dataset: list, window_size: int = WINDOW_SIZE, step_size: int = STEP_SIZE
+    dataset: list,
+    window_size: int = WINDOW_SIZE,
+    step_size: int = STEP_SIZE,
+    normalize: bool = True,
 ) -> list:
     """
     Preprocess entire SEED EEG dataset into windowed ML-ready format.
@@ -198,7 +201,9 @@ def preprocess_dataset(
 
         signal = sample["signal"]
 
-        windows = preprocess_trial(signal, window_size=window_size, step_size=step_size)
+        windows = preprocess_trial(
+            signal, window_size=window_size, step_size=step_size, normalize=normalize
+        )
 
         processed.append(
             {
