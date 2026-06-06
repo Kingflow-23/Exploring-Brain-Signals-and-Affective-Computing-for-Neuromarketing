@@ -732,14 +732,14 @@ def run_benchmark():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    llm_results = run_llm_inference(llm_data)
+    # print(f"LLM benchmark completed. results: {llm_results}")
+
     ml_results = run_ml_inference(ml_data)
     # print(f"ML benchmark completed. results: {ml_results}")
 
     dl_results = run_dl_inference(dl_data, MODEL_DIR, device)
     # print(f"DL benchmark completed. results: {dl_results}")
-
-    llm_results = run_llm_inference(llm_data)
-    # print(f"LLM benchmark completed. results: {llm_results}")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
