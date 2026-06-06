@@ -172,7 +172,7 @@ def prepare_llm_data(raw):
         feature extraction and LLM prompt generation.
     """
     return preprocess_dataset(
-        raw, window_size=LLM_WINDOW_SIZE, step_size=LLM_STEP_SIZE, normalize=False
+        raw, window_size=LLM_WINDOW_SIZE, step_size=LLM_STEP_SIZE, normalize=True
     )
 
 
