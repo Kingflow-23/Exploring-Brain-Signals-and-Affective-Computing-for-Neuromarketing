@@ -279,7 +279,8 @@ def extract_dataset_features(processed_dataset):
                 "windows": list of np.ndarray,
                 "label": int,
                 "subject": int,
-                "trial": int
+                "trial": int,
+                "rep": int
             }
 
     Returns
