@@ -40,13 +40,6 @@ Input Data:
     EEG windows: (batch_size, 1, 62_channels, window_size)
     Labels: (batch_size,) with values in {0=negative, 1=neutral, 2=positive}
 
-Configuration Parameters (from config.py):
-    - BATCH_SIZE: 64 (batch size for training)
-    - N_EPOCHS: 50 (maximum training epochs)
-    - RANDOM_STATE: 42 (reproducibility seed)
-    - TEST_SIZE: 0.2 (train/test split ratio)
-    - WINDOW_SIZE: 450 (time samples per window at 200 Hz)
-
 Output:
     - Trained model weights saved to model/deep_experiment/
     - Training metrics and logs in console
@@ -540,31 +533,13 @@ def build_models(n_chans=62, n_classes=3, window_size=WINDOW_SIZE, sfreq=200):
     All models share the same input format:
         (batch_size, 1, channels, time)
 
-    Models included:
-
-    1. EEGNet
-        - Compact CNN designed for EEG
-        - Strong baseline for small datasets
-
-    2. Deep4Net
-        - Deeper CNN architecture
-        - Captures hierarchical spatio-temporal EEG features
-
-    3. ShallowFBCSPNet (ShallowConvNet)
-        - Strong inductive bias for band-power features
-        - Often competitive on emotion EEG datasets
-
-    4. CNN + Attention (custom)
-        - CNN feature extractor + channel SE + temporal attention
-        - More flexible but higher overfitting risk
-
     Notes:
         - All models are trained under identical pipeline
         - No model-specific hyperparameter tuning is applied here
-        - Window length is shared via WINDOW_SIZE config
+        - Window length is shared via DEEP_WINDOW_SIZE config
     """
 
-    logger.info("Building EEG deep models (benchmark suite)...")
+    logger.info("Building EEG deep models ...")
 
     input_window_seconds = window_size / sfreq
 
