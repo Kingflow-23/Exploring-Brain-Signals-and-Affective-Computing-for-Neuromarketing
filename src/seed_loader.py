@@ -2,7 +2,7 @@
 SEED Dataset Loader Module.
 
 Loads raw EEG recordings from the SEED dataset
-and reconstructs the original data structure (subjects, trials, labels).
+and reconstructs the original data structure (subjects, trials, labels, repetitions).
 
 Key Features:
     - Loads emotion labels from .mat files
@@ -222,7 +222,8 @@ def build_seed_dataset(folder_path):
         "signal": (62, T),
         "label": int,
         "subject": int,
-        "trial": int
+        "trial": int,
+        "rep": int
     }
 
     -------------------------------------------------------------------------
