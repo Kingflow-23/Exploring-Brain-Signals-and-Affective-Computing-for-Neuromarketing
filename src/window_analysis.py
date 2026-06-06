@@ -174,7 +174,7 @@ def analyze_subject(subject_id: int) -> pd.DataFrame:
         signal = trial["signal"]
 
         for ws in WINDOW_SIZES:
-            
+
             logger.info(f"Subject {subject_id} - Trial {trial_idx} - Window Size {ws}")
 
             windows = create_windows(signal, ws)
