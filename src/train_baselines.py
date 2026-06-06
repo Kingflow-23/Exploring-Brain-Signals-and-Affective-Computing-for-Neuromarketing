@@ -37,25 +37,13 @@ Features Used (374 total):
 
 Input Data:
     - Raw EEG: (62, variable_length) per trial
-    - Labels: {-1: negative, 0: neutral, 1: positive}
+    - Labels: {0: negative, 1: neutral, 2: positive}
     - Subjects: 15 individuals with 45 trials each (15 trials × 3 sessions)
 
 Output:
     - Trained models: model/[model_name]/model.pkl
     - Metrics: model/[model_name]/metrics.json
     - Confusion matrix: model/[model_name]/confusion.npy
-
-Configuration (from config.py):
-    - TEST_SIZE: 0.2 (train/test split)
-    - RANDOM_STATE: 42 (reproducibility)
-    - WINDOW_SIZE: 450 samples (~2.25 seconds at 200 Hz)
-    - STEP_SIZE: 225 samples (50% overlap)
-
-Performance Expectations:
-    - Baseline: ~33% (random guessing for 3 classes)
-    - Simple models (Logistic): ~50-55%
-    - Ensemble models (Random Forest/XGBoost): ~60-70%
-    - Deep learning typically: ~70-85%
 """
 
 import os
@@ -279,7 +267,7 @@ def main():
 
     raw = build_seed_dataset(DATASET_DIR)
 
-    processed = preprocess_dataset(raw)
+    processed = preprocess_dataset(raw, normalize=False)
 
     X, y, groups = extract_dataset_features(processed)
 
