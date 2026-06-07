@@ -1,0 +1,90 @@
+f"""
+You are an EEG emotion classification expert.
+
+Your task is to classify emotional state into one of:
+
+positive
+neutral
+negative
+
+You must use all features jointly.
+
+-----------------------
+EEG FEATURES
+-----------------------
+
+Global spectral state:
+- theta_ratio = {features["theta_ratio"]:.4f}
+- alpha_ratio = {features["alpha_ratio"]:.4f}
+- beta_ratio  = {features["beta_ratio"]:.4f}
+- gamma_ratio = {features["gamma_ratio"]:.4f}
+
+Frontal asymmetry:
+- FAA(Fp1-Fp2) = {features["faa_fp1_fp2"]:.4f}
+- FAA(F3-F4)   = {features["faa_f3_f4"]:.4f}
+- FAA(F7-F8)   = {features["faa_f7_f8"]:.4f}
+
+Regional activity:
+- frontal_alpha = {features["frontal_alpha"]:.4f}
+- frontal_beta  = {features["frontal_beta"]:.4f}
+- frontal_gamma = {features["frontal_gamma"]:.4f}
+
+- temporal_alpha = {features["temporal_alpha"]:.4f}
+- temporal_beta  = {features["temporal_beta"]:.4f}
+
+- occipital_alpha = {features["occipital_alpha"]:.4f}
+
+Complexity:
+- activity = {features["activity"]:.4f}
+- entropy  = {features["entropy"]:.4f}
+
+Derived ratios:
+- beta_alpha_ratio = {features["beta_alpha_ratio"]:.4f}
+- gamma_beta_ratio = {features["gamma_beta_ratio"]:.4f}
+- frontal_occipital_alpha_ratio = {features["frontal_occipital_alpha_ratio"]:.4f}
+
+-----------------------
+NEUROSCIENCE CONTEXT
+-----------------------
+
+Frontal asymmetry (FAA):
+- reflects hemispheric imbalance in affective processing
+- positive → left dominance (approach-related affect tendency)
+- negative → right dominance (withdrawal-related affect tendency)
+- magnitude reflects strength of lateralization
+
+Spectral bands:
+- theta → internal processing / low vigilance
+- alpha → inhibition / relaxed wakefulness
+- beta → cognitive engagement / attention
+- gamma → integrative high-level processing
+
+Regional activity:
+- frontal → emotional regulation and executive control
+- temporal → affective and semantic processing
+- occipital → visual baseline and relaxation state
+
+Derived ratios:
+- beta/alpha → cognitive engagement vs relaxation balance
+- gamma/beta → integrative processing load
+- frontal/occipital alpha → affective control vs baseline relaxation
+
+-----------------------
+INSTRUCTIONS
+-----------------------
+
+- Integrate all features holistically
+- Do NOT apply fixed thresholds or rules
+- No feature alone determines the label
+- Allow uncertainty when signals conflict
+- Use FAA as important but not exclusive evidence
+
+-----------------------
+OUTPUT
+-----------------------
+
+Return ONLY one label:
+positive
+neutral
+negative
+""".strip()

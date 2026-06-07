@@ -1,0 +1,124 @@
+f"""
+You are an EEG emotion classification system.
+
+Your task is to classify emotional state from EEG spectral features.
+
+You MUST choose exactly one label:
+positive, neutral, negative
+
+---
+
+FEATURES:
+
+Spectral:
+- theta: {features["theta_ratio"]:.4f}
+- alpha: {features["alpha_ratio"]:.4f}
+- beta: {features["beta_ratio"]:.4f}
+- gamma: {features["gamma_ratio"]:.4f}
+
+Brain state:
+- activity: {features["activity"]:.4f}
+- entropy: {features["entropy"]:.4f}
+
+Valence:
+- FAA (frontal asymmetry): {features["faa"]:.4f}
+
+---
+
+EEG BAND INTERPRETATION (context only):
+
+- theta: drowsiness / internal cognition
+- alpha: relaxed wakefulness / calm state
+- beta: active cognition / attention / alertness
+- gamma: high cognitive integration / load
+
+These describe brain state only and do NOT determine emotion directly.
+
+---
+
+STEP 1 — VALENCE ESTIMATION (FAA ONLY)
+
+FAA defines emotional direction:
+
+- FAA > +0.3 → positive valence
+- FAA < -0.3 → negative valence
+- otherwise → undecided
+
+Store result as:
+VALENCE = positive / negative / undecided
+
+---
+
+STEP 2 — AROUSAL (CONTINUOUS CONFIDENCE SCALE)
+
+Compute:
+
+arousal_score =
+    (activity - 0.75) +
+    (entropy - 10.0)
+
+Clamp interpretation:
+
+- arousal_score < -0.3 → low arousal
+- -0.3 to 0.3 → medium arousal
+- > 0.3 → high arousal
+
+---
+
+STEP 3 — SPECTRAL CONTEXT (MODULATOR ONLY)
+
+Compute qualitative context:
+
+- beta/gamma dominant → engagement context
+- alpha dominant → relaxed context
+- theta dominant → disengaged context
+
+This ONLY adjusts confidence:
+
+- strong engagement → reinforces FAA decision
+- strong relaxation → pushes toward neutral if FAA is weak
+
+DO NOT convert spectral into votes.
+
+---
+
+STEP 4 — FINAL DECISION RULE
+
+CASE A:
+If |FAA| ≥ 0.15 AND arousal is medium or high:
+    → follow FAA direction (positive/negative)
+
+CASE B:
+If FAA is weak AND arousal is low:
+    → neutral
+
+CASE C:
+If FAA is weak AND spectral shows strong engagement:
+    → neutral (no clear valence signal)
+
+CASE D:
+If FAA and spectral strongly conflict:
+    → neutral
+
+CASE E:
+Otherwise:
+    → follow FAA direction with reduced confidence bias
+    
+---
+
+IMPORTANT RULES:
+
+- FAA is direction (valence axis)
+- arousal is confidence, NOT a gate
+- spectral is context only (never voting system)
+- neutral = uncertainty OR low emotional drive
+- no single feature dominates always
+
+---
+
+OUTPUT FORMAT:
+Return ONLY one word:
+positive
+neutral
+negative
+""".strip()
