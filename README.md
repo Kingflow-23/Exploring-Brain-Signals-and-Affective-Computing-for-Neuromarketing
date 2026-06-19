@@ -268,42 +268,158 @@ For complete configuration options, see `src/config.py`.
 
 ## Results
 
-### Benchmark Results
+### Benchmark Artifacts
 
-Comprehensive benchmark results for all models are stored in:
-- `model/benchmark_summary.json`: Overall performance summary
-- `model/deep_results.json`: Deep learning model results
-- `model/*/metrics.json`: Per-model metrics (precision, recall, F1-score, accuracy)
-- `model/*/confusion.npy`: Confusion matrices
+All experimental outputs are stored in the repository:
 
-### Inference Results
+- `model/benchmark_summary.json`: global performance summary across models
+- `model/deep_results.json`: deep learning evaluation results
+- `model/*/metrics.json`: per-model metrics (accuracy, F1-score, precision, recall)
+- `model/*/confusion.npy`: confusion matrices for error analysis
+- `output/benchmark_inference_*.json`: timestamped inference logs
 
-Latest inference benchmarks:
-- `output/benchmark_inference_*.json`: Time-stamped inference results
+---
 
-### Performance Summary
+### Overall Performance Summary
 
-The benchmark evaluated a range of Machine Learning (ML), Deep Learning (DL), and Large Language Model (LLM)-based approaches on the SEED EEG emotion recognition dataset using a three-class classification setup (**Negative**, **Neutral**, and **Positive** emotions).
+The benchmark evaluates **classical ML models**, **deep learning architectures**, and a **Large Language Model (LLM)** on the SEED EEG emotion recognition dataset using a **3-class classification task**:
 
-Among the traditional ML models, **Logistic Regression** achieved the strongest overall performance, reaching **62.8% window-level accuracy** and **66.7% trial-level accuracy**, demonstrating the effectiveness of handcrafted EEG features for affective state recognition. Other classical models, including **Random Forest**, **Extra Trees**, and **XGBoost**, achieved comparable overall accuracies (~60%) but showed a tendency to over-predict the positive class.
+- Negative
+- Neutral
+- Positive
 
-Among the deep learning architectures, **LSTM** and **TCN** delivered the best trial-level performance, both achieving **71.1% accuracy**. The **LSTM** also achieved the highest window-level accuracy (**63.7%**) among all evaluated models. Convolutional architectures such as **EEGNet**, **Deep4Net**, **ShallowConvNet**, **CNN-Attention**, **CNN-LSTM**, and **EEGConformer** achieved competitive results but generally exhibited greater confusion between negative and neutral emotional states.
+---
 
-Analysis of the confusion matrices revealed that the **Neutral** class was consistently the most difficult emotion to classify, with many neutral samples being misclassified as either negative or positive across both ML and DL models. In contrast, **Positive** emotions typically achieved the highest recall, suggesting stronger class separability within the extracted EEG representations.
+### Classical Machine Learning Results
 
-The evaluated LLM-based classifier (**Qwen3.6-35B-A3B**) substantially underperformed specialized supervised models, achieving only **38.1% window-level accuracy** and **44.4% trial-level accuracy**. This result highlights the limitations of direct reasoning over numerical EEG feature vectors without task-specific training.
+| Model | Window Accuracy | Trial Accuracy |
+|------|------|------|
+| Logistic Regression | **62.83%** | **66.67%** |
+| XGBoost | 60.88% | 60.00% |
+| Random Forest | 60.05% | 60.00% |
+| Extra Trees | 59.05% | 57.78% |
+| SGD Classifier | 58.81% | 55.56% |
 
-Overall, the findings indicate that temporal neural architectures such as **LSTM** and **TCN** provide the strongest performance on the SEED dataset, while simpler feature-based methods such as **Logistic Regression** remain surprisingly competitive and offer a strong, interpretable baseline for EEG-based emotion recognition.
+**Key insight:**
+- Logistic Regression is the strongest baseline
+- Indicates that EEG features are partially **linearly separable after preprocessing**
+- Tree-based methods show class bias toward **Positive emotion**
+
+---
+
+### Deep Learning Results
+
+| Model | Window Accuracy | Trial Accuracy |
+|------|------|------|
+| LSTM | **63.70%** | **71.11%** |
+| TCN | 60.40% | **71.11%** |
+| EEGNet | 56.78% | 53.33% |
+| Deep4Net | 55.07% | 55.56% |
+| ShallowConvNet | 56.65% | 60.00% |
+| EEGConformer | 56.57% | 55.56% |
+| CNN-Attention | 55.12% | 55.56% |
+| CNN-LSTM | 51.28% | 51.11% |
+
+**Key insight:**
+- Temporal architectures (**LSTM, TCN**) outperform convolution-only models
+- Performance saturates around **~71% trial accuracy**
+- No architecture significantly breaks this ceiling
+
+---
+
+### LLM-Based Classification (Qwen3.6-35B-A3B)
+
+| Model | Window Accuracy | Trial Accuracy |
+|------|------|------|
+| Qwen3.6-35B-A3B | **38.11%** | **44.44%** |
+
+**Key insight:**
+- Strong underperformance compared to supervised models
+- Indicates that **LLMs are not suitable for raw EEG feature reasoning without task-specific training or fine-tuning**
+
+---
+
+## Performance Analysis
+
+### 1. Class Structure and Separability
+
+Across all models, a consistent pattern emerges:
+
+- **Positive emotion → highest recall**
+- **Negative emotion → moderate confusion**
+- **Neutral emotion → highest ambiguity**
+
+This suggests:
+
+> The Neutral class behaves as a **transition manifold** between Positive and Negative states rather than a strictly separable class.
+
+---
+
+### 2. Why Logistic Regression Performs Surprisingly Well
+
+Logistic Regression remains competitive because:
+
+- EEG features are heavily engineered (spectral + asymmetry + entropy)
+- Decision boundaries are approximately linear in transformed space
+- Noise is reduced through preprocessing and window averaging
+
+---
+
+### 3. Deep Learning Performance Ceiling (~70%)
+
+Despite increased model complexity, deep architectures converge around:
+
+- **~63–64% window accuracy**
+- **~71% trial accuracy**
+
+This ceiling is primarily due to:
+
+- strong inter-subject variability
+- limited dataset size (15 subjects)
+- loss of spatial EEG structure after feature extraction
+- redundancy across temporal windows
+
+> Result: models learn temporal smoothing rather than richer discriminative structure.
+
+---
+
+### 4. LLM Failure Mode
+
+The LLM fails due to structural mismatch:
+
+- input = normalized scalar EEG features
+- no spatial topology
+- no temporal continuity
+- no domain-specific pretraining
+
+Consequently:
+
+> The model treats EEG signals as generic numerical tokens, lacking inductive bias for neurophysiological patterns.
+
+---
+
+## Key Takeaway
+
+Across all model families:
+
+> Performance is primarily constrained by **feature separability**, not model capacity.
+
+This explains why:
+
+- classical ML is competitive
+- deep learning does not significantly outperform baselines
+- LLMs fail entirely in zero-shot setting
 
 ---
 
 ## Authors
 
-* **[Florian HOUNKPATIN](https://www.linkedin.com/in/florian-hounkpatin/)**
-* **[Noémi DOMBOU](https://www.linkedin.com/in/noemi-dombou/)**
-* **[Axel ONOBIONO](https://www.linkedin.com/in/axel-onobiono/)**
-* **[Ephraim KOSSONOU](https://www.linkedin.com/in/ephraïm-kossonou/)**
+- **Florian HOUNKPATIN** — https://www.linkedin.com/in/florian-hounkpatin/
+- **Noémi DOMBOU** — https://www.linkedin.com/in/noemi-dombou/
+- **Axel ONOBIONO** — https://www.linkedin.com/in/axel-onobiono/
+- **Ephraim KOSSONOU** — https://www.linkedin.com/in/ephraïm-kossonou/
 
+---
 
 ## References
 
