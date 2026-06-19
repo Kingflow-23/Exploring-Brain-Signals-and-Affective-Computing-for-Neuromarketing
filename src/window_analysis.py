@@ -18,7 +18,7 @@ logger = logging.getLogger("WINDOW_ANALYSIS")
 # CONFIG
 # =========================================================
 
-WINDOW_SIZES = [200, 400, 600, 800, 1000, 1200]
+WINDOW_SIZES = [200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000]
 STEP_RATIO = 0.5  # 50% overlap by default
 
 # Your actual feature schema, grouped semantically.
