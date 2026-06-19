@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project explores the intersection of EEG signal processing, machine learning, and deep learning to understand emotional responses and affective states through brain signals. The project focuses on emotion classification using the SEED (Similarity Emotion Database) dataset, employing both classical machine learning algorithms and advanced deep learning architectures.
+This project explores the intersection of EEG signal processing, machine learning, and deep learning to understand emotional responses and affective states through brain signals. The project focuses on emotion classification using the SEED dataset, employing both classical machine learning algorithms and advanced deep learning architectures.
 
 The goal is to develop robust models for emotion recognition from EEG signals, with applications in neuromarketing research, user experience optimization, and affective computing. And as a part of the project, it was a goal to assess for llm perfromance in emotion classification.
 
@@ -116,7 +116,7 @@ The goal is to develop robust models for emotion recognition from EEG signals, w
 
 ### SEED Dataset
 
-The project primarily uses the SEED (Similarity Emotion Database) dataset, which contains:
+The project primarily uses the SEED dataset, which contains:
 
 - **15 subjects** with multiple sessions
 - **3 emotion classes**: Positive, Negative, Neutral
@@ -385,12 +385,125 @@ This ceiling is primarily due to:
 
 ### 4. LLM Failure Mode
 
-The LLM fails due to structural mismatch:
+The LLM underperformed primarily because of a structural mismatch between the nature of EEG data and the reasoning capabilities of a general-purpose language model.
 
-- input = normalized scalar EEG features
-- no spatial topology
-- no temporal continuity
-- no domain-specific pretraining
+The model received input in the form of normalized scalar EEG features, such as spectral band ratios, frontal asymmetry indices, entropy, and derived statistical measures. While these features are meaningful from a signal-processing perspective, they remove much of the original information contained in raw EEG recordings.
+
+More specifically, the LLM was missing three critical forms of information:
+
+Spatial topology: the relationships between EEG channels and brain regions
+Temporal continuity: how activity evolves over time across windows
+Neurophysiological inductive bias: prior knowledge about EEG dynamics and emotional processing
+
+Without these components, the LLM effectively treated the EEG features as generic numerical tokens rather than structured neurophysiological signals.
+
+#### **Personal Analysis of the failure**
+
+To better understand this failure, I manually inspected the feature values passed to the model in output/window_analysis/Values.txt.
+
+One major observation was that the feature distributions did not exhibit strong or consistent separability across emotion classes. Even after experimenting with different window sizes, the distributions remained highly overlapping. Although changing the window size slightly altered the spread of some features, it did not produce clearer class boundaries between Negative, Neutral, and Positive emotions.
+
+Among all extracted features, the one that appeared most meaningful to me was Frontal Alpha Asymmetry (FAA).
+
+FAA is often discussed in neuroscience literature as being correlated with emotional valence:
+
+- more positive FAA → often associated with positive affect or approach behavior
+- more negative FAA → often associated with negative affect or withdrawal behavior
+
+During manual inspection, FAA seemed to follow this pattern in some individual trials:
+
+- negative videos often produced more negative FAA values
+- positive videos often produced more positive FAA values
+
+However, this pattern did not generalize well across the full test dataset. 
+
+FAA became overpositive implying an over positive and explain there therefore it s over prediction that we can see in the result. And this behavior can as well be seen in some ML model like the tree models ... So that may be a thing to get on the data analysis par t
+
+There are several possible explanations for this.
+
+First, EEG signals are highly subject-dependent. Brain activity varies substantially between individuals due to anatomical differences, baseline neural patterns, attention level, fatigue, stress, and many other factors. A feature that appears meaningful for one subject may become noisy or unreliable for another.
+
+Second, the issue may lie in the interpretation of the feature itself.
+
+Some EEG-derived features especially spectral band powers (theta, alpha, beta, gamma) can often be interpreted using relatively established frameworks such as:
+
+- cortical activation
+- attention
+- relaxation
+- cognitive load
+
+FAA, however, is more delicate. While often associated with valence, its interpretation is far from universal and depends heavily on:
+
+- preprocessing quality
+- artifact removal
+- referencing strategy
+- frequency-band selection
+- exact channel selection
+
+Because FAA did not show the expected global distribution in this project, one possibility is that there may be issues in the preprocessing pipeline, especially in the steps involved in computing asymmetry features.
+
+I cannot conclude this with certainty, since I am not a neuroscientist and my expertise in EEG interpretation remains limited. A more informed researcher with stronger domain knowledge in affective neuroscience would likely be better positioned to investigate whether:
+
+- the feature extraction pipeline is optimal
+- the preprocessing introduced distortions
+- or the SEED dataset itself simply does not support strong FAA-based separation under this setup
+
+It is also possible that with a more robust preprocessing pipeline especially one that removes artifacts more aggressively and preserves meaningful regional activity an LLM-based classifier could perform better.
+
+**What Would Be Needed for Better LLM Performance?**
+
+To push this research further, the first requirement would be identifying more deterministic and discriminative EEG features.
+
+The current feature set appears too ambiguous for zero-shot reasoning.
+
+Future work may require:
+
+- stronger feature selection
+- better signal denoising
+- improved artifact rejection
+- features with clearer emotion-class separability
+- prompt engineering specifically tailored to subtle EEG changes
+
+A carefully engineered prompt might help an LLM reason better about nuanced changes in EEG features.
+
+However, this leads to a more fundamental question:
+
+**Is an LLM Even Relevant for This Task?**
+
+This is where I became skeptical.
+
+If using an LLM requires me to:
+
+- deeply preprocess EEG signals
+- engineer discriminative features manually
+- select the best subset of features
+- carefully design a highly specialized prompt
+- potentially repeat this pipeline whenever new subjects are introduced
+
+then the practical value of using an LLM becomes questionable.
+
+In an ideal scenario, the LLM would reason directly from raw EEG windows or minimally processed signals and discover meaningful structure on its own.
+
+That was initially the goal.
+
+However, based on the experiments conducted here, this approach did not work.
+
+As a result, if extensive feature engineering remains necessary, then it becomes difficult to justify the use of an LLM over traditional machine learning or deep learning approaches.
+
+A supervised ML model can already:
+
+- learn feature importance automatically
+- optimize class boundaries directly
+- adapt weights based on data
+- outperform the LLM by a large margin
+
+Therefore, if heavy engineering is unavoidable, it is more efficient to let specialized ML or DL models handle the classification.
+
+**Final Conclusion**
+
+The failure of the LLM in this project does not necessarily mean LLMs can never be used for EEG analysis.
+
+Rather, it suggests that current general-purpose LLMs are poorly suited for direct EEG emotion classification without significant domain adaptation.
 
 Consequently:
 
@@ -414,10 +527,10 @@ This explains why:
 
 ## Authors
 
-- **Florian HOUNKPATIN** — https://www.linkedin.com/in/florian-hounkpatin/
-- **Noémi DOMBOU** — https://www.linkedin.com/in/noemi-dombou/
-- **Axel ONOBIONO** — https://www.linkedin.com/in/axel-onobiono/
-- **Ephraim KOSSONOU** — https://www.linkedin.com/in/ephraïm-kossonou/
+- [**Florian HOUNKPATIN**](https://www.linkedin.com/in/florian-hounkpatin/)
+- [**Noémi DOMBOU**](https://www.linkedin.com/in/noemi-dombou/)
+- [**Axel ONOBIONO**](https://www.linkedin.com/in/axel-onobiono/)
+- [**Ephraim KOSSONOU**](https://www.linkedin.com/in/ephraïm-kossonou/)
 
 ---
 
@@ -428,4 +541,4 @@ This explains why:
 
 ---
 
-**Last Updated**: June 7, 2026
+**Last Updated**: June 19, 2026
