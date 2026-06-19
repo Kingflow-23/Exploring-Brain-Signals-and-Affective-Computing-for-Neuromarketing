@@ -1,0 +1,139 @@
+You are an EEG emotion classification expert.
+
+Your task is to classify emotional state into one of:
+
+positive
+neutral
+negative
+
+Use all EEG features jointly and reason from the full pattern of evidence.
+
+Do not rely on any single feature.
+
+-----------------------
+EEG FEATURES
+-----------------------
+
+All feature values are normalized using dataset-level scaling.
+
+Interpret values relatively:
+- values near 0 indicate typical / average feature levels
+- larger positive values indicate stronger-than-average expression
+- larger negative values indicate weaker-than-average expression
+
+Reason using relative magnitudes and cross-feature relationships rather than absolute numeric thresholds.
+Compare features by their relative strength within the full EEG pattern.
+
+Global spectral state:
+- theta_ratio = {features["theta_ratio"]:.4f}
+- alpha_ratio = {features["alpha_ratio"]:.4f}
+- beta_ratio  = {features["beta_ratio"]:.4f}
+- gamma_ratio = {features["gamma_ratio"]:.4f}
+
+Frontal asymmetry:
+- FAA(Fp1-Fp2) = {features["faa_fp1_fp2"]:.4f}
+- FAA(F3-F4)   = {features["faa_f3_f4"]:.4f}
+- FAA(F7-F8)   = {features["faa_f7_f8"]:.4f}
+
+Regional activity:
+- frontal_alpha = {features["frontal_alpha"]:.4f}
+- frontal_beta  = {features["frontal_beta"]:.4f}
+- frontal_gamma = {features["frontal_gamma"]:.4f}
+
+- temporal_alpha = {features["temporal_alpha"]:.4f}
+- temporal_beta  = {features["temporal_beta"]:.4f}
+
+- occipital_alpha = {features["occipital_alpha"]:.4f}
+
+Complexity:
+- activity = {features["activity"]:.4f}
+- entropy  = {features["entropy"]:.4f}
+
+Derived ratios:
+- beta_alpha_ratio = {features["beta_alpha_ratio"]:.4f}
+- gamma_beta_ratio = {features["gamma_beta_ratio"]:.4f}
+- frontal_occipital_alpha_ratio = {features["frontal_occipital_alpha_ratio"]:.4f}
+
+-----------------------
+NEUROSCIENCE CONTEXT
+-----------------------
+
+Some features showed stronger discriminative power in this dataset,
+especially frontal engagement metrics, occipital alpha, activity,
+and frontal-vs-posterior balance.
+
+Use this only as soft contextual guidance.
+Do not assume these features dominate every sample.
+
+-----------------------
+CLASS PATTERNS
+-----------------------
+
+Positive:
+Typically associated with:
+
+- stronger frontal engagement
+- higher frontal_gamma and/or frontal_alpha
+- higher activity
+- higher gamma_beta_ratio
+- stronger frontal dominance relative to occipital baseline
+- reduced occipital alpha
+
+Neutral:
+Typically associated with:
+
+- balanced spectral distribution
+- moderate frontal engagement
+- no strong dominance toward activation or suppression
+- mixed evidence across features
+
+Negative:
+Typically associated with:
+
+- weaker frontal engagement than positive
+- stronger posterior alpha or cortical inhibition
+- elevated occipital alpha and/or alpha_ratio
+- possible stronger temporal involvement
+
+-----------------------
+REASONING PROCESS
+-----------------------
+
+Evaluate in this order:
+
+1. Estimate frontal engagement from:
+   frontal_gamma, frontal_alpha, activity, gamma_beta_ratio
+
+2. Estimate posterior relaxation or inhibition from:
+   occipital_alpha, alpha_ratio
+
+3. Estimate frontal-vs-posterior balance from:
+   frontal_occipital_alpha_ratio
+
+4. Estimate temporal contribution from:
+   temporal_beta, temporal_alpha
+
+5. Use FAA only as weak supporting evidence
+
+Decision policy:
+
+- Use weighted evidence, not thresholds
+- No single feature determines the class
+- If evidence supports strong and organized frontal engagement
+    with low posterior inhibition and no strong conflicting temporal dominance,
+    lean positive.
+- If evidence supports posterior inhibition, elevated occipital alpha,
+    or dysregulated temporal dominance with weak frontal control,
+    lean negative.
+- If evidence is mixed, conflicting, or weak → choose neutral
+
+-----------------------
+OUTPUT
+-----------------------
+
+Return ONLY one label:
+
+positive
+neutral
+negative
+""".strip()
