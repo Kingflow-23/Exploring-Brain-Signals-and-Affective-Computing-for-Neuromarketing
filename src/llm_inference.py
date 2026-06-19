@@ -203,11 +203,23 @@ positive
 neutral
 negative
 
-You must use all features jointly.
+Use all EEG features jointly and reason from the full pattern of evidence.
+
+Do not rely on any single feature.
 
 -----------------------
 EEG FEATURES
 -----------------------
+
+All feature values are normalized using dataset-level scaling.
+
+Interpret values relatively:
+- values near 0 indicate typical / average feature levels
+- larger positive values indicate stronger-than-average expression
+- larger negative values indicate weaker-than-average expression
+
+Reason using relative magnitudes and cross-feature relationships rather than absolute numeric thresholds.
+Compare features by their relative strength within the full EEG pattern.
 
 Global spectral state:
 - theta_ratio = {features["theta_ratio"]:.4f}
@@ -243,43 +255,81 @@ Derived ratios:
 NEUROSCIENCE CONTEXT
 -----------------------
 
-Frontal asymmetry (FAA):
-- reflects hemispheric imbalance in affective processing
-- positive → left dominance (approach-related affect tendency)
-- negative → right dominance (withdrawal-related affect tendency)
-- magnitude reflects strength of lateralization
+Some features showed stronger discriminative power in this dataset,
+especially frontal engagement metrics, occipital alpha, activity,
+and frontal-vs-posterior balance.
 
-Spectral bands:
-- theta → internal processing / low vigilance
-- alpha → inhibition / relaxed wakefulness
-- beta → cognitive engagement / attention
-- gamma → integrative high-level processing
-
-Regional activity:
-- frontal → emotional regulation and executive control
-- temporal → affective and semantic processing
-- occipital → visual baseline and relaxation state
-
-Derived ratios:
-- beta/alpha → cognitive engagement vs relaxation balance
-- gamma/beta → integrative processing load
-- frontal/occipital alpha → affective control vs baseline relaxation
+Use this only as soft contextual guidance.
+Do not assume these features dominate every sample.
 
 -----------------------
-INSTRUCTIONS
+CLASS PATTERNS
 -----------------------
 
-- Integrate all features holistically
-- Do NOT apply fixed thresholds or rules
-- No feature alone determines the label
-- Allow uncertainty when signals conflict
-- Use FAA as important but not exclusive evidence
+Positive:
+Typically associated with:
+
+- stronger frontal engagement
+- higher frontal_gamma and/or frontal_alpha
+- higher activity
+- higher gamma_beta_ratio
+- stronger frontal dominance relative to occipital baseline
+- reduced occipital alpha
+
+Neutral:
+Typically associated with:
+
+- balanced spectral distribution
+- moderate frontal engagement
+- no strong dominance toward activation or suppression
+- mixed evidence across features
+
+Negative:
+Typically associated with:
+
+- weaker frontal engagement than positive
+- stronger posterior alpha or cortical inhibition
+- elevated occipital alpha and/or alpha_ratio
+- possible stronger temporal involvement
+
+-----------------------
+REASONING PROCESS
+-----------------------
+
+Evaluate in this order:
+
+1. Estimate frontal engagement from:
+   frontal_gamma, frontal_alpha, activity, gamma_beta_ratio
+
+2. Estimate posterior relaxation or inhibition from:
+   occipital_alpha, alpha_ratio
+
+3. Estimate frontal-vs-posterior balance from:
+   frontal_occipital_alpha_ratio
+
+4. Estimate temporal contribution from:
+   temporal_beta, temporal_alpha
+
+5. Use FAA only as weak supporting evidence
+
+Decision policy:
+
+- Use weighted evidence, not thresholds
+- No single feature determines the class
+- If evidence supports strong and organized frontal engagement
+    with low posterior inhibition and no strong conflicting temporal dominance,
+    lean positive.
+- If evidence supports posterior inhibition, elevated occipital alpha,
+    or dysregulated temporal dominance with weak frontal control,
+    lean negative.
+- If evidence is mixed, conflicting, or weak → choose neutral
 
 -----------------------
 OUTPUT
 -----------------------
 
 Return ONLY one label:
+
 positive
 neutral
 negative
