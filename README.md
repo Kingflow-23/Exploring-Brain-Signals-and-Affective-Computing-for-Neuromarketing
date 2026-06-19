@@ -83,7 +83,7 @@ The goal is to develop robust models for emotion recognition from EEG signals, w
 
 1. **Clone the repository:**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Kingflow-23/Exploring-Brain-Signals-and-Affective-Computing-for-Neuromarketing.git
    cd Exploring-Brain-Signals-and-Affective-Computing-for-Neuromarketing
    ```
 
