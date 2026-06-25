@@ -7,10 +7,10 @@ Extracted Features (per window):
     1. Bandpower (248 features): Log-power in theta, alpha, beta, gamma for all 62 channels
     2. Differential Entropy (62 features): Signal complexity per channel
     3. Power Spectral Density (4 features): Average band power across all channels
-    4. Differential Asymmetry (30 features): Left-right hemisphere differences in entropy
-    5. Relative Asymmetry (30 features): Normalized asymmetry ratios
+    4. Differential Asymmetry (27 features): Left-right hemisphere differences in entropy
+    5. Relative Asymmetry (27 features): Normalized asymmetry ratios
 
-Total Features: 374 per window
+Total Features: 368 per window
 
 Design Philosophy:
     - Deterministic: Identical input always produces identical output (no randomness)
@@ -29,7 +29,7 @@ Channel Order:
     Strict adherence to SEED 10-20 montage (62 channels) for consistency across models
 
 Input: EEG window shape (62, window_size)
-Output: Feature vector shape (374,)
+Output: Feature vector shape (368,)
 """
 
 import logging
@@ -182,7 +182,7 @@ def compute_dasm(de: np.ndarray) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        DASM values for each anatomical pair, shape (30,)
+        DASM values for each anatomical pair, shape (27,)
     """
     return np.asarray([de[l] - de[r] for l, r in PAIR_INDICES], dtype=np.float32)
 
@@ -204,7 +204,7 @@ def compute_rasm(de: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        RASM values for each anatomical pair, shape (30,)
+        RASM values for each anatomical pair, shape (27,)
     """
     return np.asarray(
         [de[l] / (de[r] + eps) for l, r in PAIR_INDICES], dtype=np.float32
@@ -224,8 +224,8 @@ def extract_features(window: np.ndarray) -> np.ndarray:
     1. Bandpower: Log-transformed power in 4 bands × 62 channels (248 dims)
     2. Differential Entropy (DE): Signal complexity per channel (62 dims)
     3. Power Spectral Density (PSD): Global spectral descriptor (4 dims)
-    4. Differential Asymmetry (DASM): Left-right difference (30 dims)
-    5. Relative Asymmetry (RASM): Left-right ratio (30 dims)
+    4. Differential Asymmetry (DASM): Left-right difference (27 dims)
+    5. Relative Asymmetry (RASM): Left-right ratio (27 dims)
 
     Total: ~374 features per window
 
@@ -237,7 +237,7 @@ def extract_features(window: np.ndarray) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        Feature vector with shape (~374,)
+        Feature vector with shape (368,)
     """
 
     features = []

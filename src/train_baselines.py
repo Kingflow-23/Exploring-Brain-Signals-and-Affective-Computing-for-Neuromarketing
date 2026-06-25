@@ -28,12 +28,12 @@ Key Features:
     - Model persistence: Trained models saved with joblib
     - Reproducible: Fixed random state for all stochastic operations
 
-Features Used (374 total):
+Features Used (368 total):
     - Bandpower: 248 features (62 channels × 4 bands)
     - Differential Entropy: 62 features (1 per channel)
     - Power Spectral Density: 4 features (1 per band)
-    - Differential Asymmetry: 30 features (left-right differences)
-    - Relative Asymmetry: 30 features (normalized asymmetry)
+    - Differential Asymmetry: 27 features (left-right differences)
+    - Relative Asymmetry: 27 features (normalized asymmetry)
 
 Input Data:
     - Raw EEG: (62, variable_length) per trial
