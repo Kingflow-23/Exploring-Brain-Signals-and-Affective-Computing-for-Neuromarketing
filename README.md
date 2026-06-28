@@ -227,6 +227,16 @@ Perform inference with LLM models:
 python src/llm_inference.py
 ```
 
+### LLM Feature Distribution Analysis
+
+Analyze the exact EEG feature values passed to the LLM prompt:
+
+```bash
+python src/llm_feature_distribution_analysis.py
+```
+
+This generates the report and figures in `output/llm_feature_distribution_analysis/`.
+
 ## Models
 
 ### Model Registry
@@ -277,6 +287,7 @@ All experimental outputs are stored in the repository:
 - `model/*/metrics.json`: per-model metrics (accuracy, F1-score, precision, recall)
 - `model/*/confusion.npy`: confusion matrices for error analysis
 - `output/benchmark_inference_*.json`: timestamped inference logs
+- `output/llm_feature_distribution_analysis/`: feature-distribution audit of the values passed to the LLM, including plots and discussion notes
 
 ---
 
@@ -397,7 +408,12 @@ Neurophysiological inductive bias: prior knowledge about EEG dynamics and emotio
 
 Without these components, the LLM effectively treated the EEG features as generic numerical tokens rather than structured neurophysiological signals.
 
-#### **Personal Analysis of the failure**
+#### **Preliminary Manual Analysis**
+
+<details>
+<summary>Earlier exploratory notes, superseded by the distribution audit below</summary>
+
+The more complete and reproducible version of this analysis is now provided in the updated LLM feature-distribution section below.
 
 To better understand this failure, I manually inspected the feature values passed to the model in output/window_analysis/Values.txt.
 
@@ -417,7 +433,7 @@ During manual inspection, FAA seemed to follow this pattern in some individual t
 
 However, this pattern did not generalize well across the full test dataset. 
 
-FAA became overpositive implying an over positive and explain there therefore it s over prediction that we can see in the result. And this behavior can as well be seen in some ML model like the tree models ... So that may be a thing to get on the data analysis par t
+The updated distribution audit shows that FAA should not be interpreted as a simple standalone explanation for over-prediction, because the FAA features have weak global class separability and require careful sign-convention handling.
 
 There are several possible explanations for this.
 
@@ -509,6 +525,119 @@ Consequently:
 
 > The model treats EEG signals as generic numerical tokens, lacking inductive bias for neurophysiological patterns.
 
+</details>
+
+---
+
+## Updated LLM Feature Distribution Analysis
+
+After the first LLM benchmark, I added a dedicated analysis of the numerical values that were actually passed to the LLM prompt. This is important because the LLM was not given raw EEG signals. It received a compact, text-formatted representation of each EEG window through 18 scalar features: spectral ratios, frontal asymmetry values, regional band-power estimates, entropy/activity measures, and derived ratios.
+
+The full generated report is available here:
+
+- `src/llm_feature_distribution_analysis.py`
+- `output/llm_feature_distribution_analysis/README.md`
+- `output/llm_feature_distribution_analysis/llm_prompt_feature_values.csv`
+- `output/llm_feature_distribution_analysis/feature_distribution_summary.csv`
+
+The audit covers **4,017 LLM prompt windows** from the held-out test set:
+
+- negative: **1,323 windows**
+- neutral: **1,308 windows**
+- positive: **1,386 windows**
+- LLM window size: **1000 samples**
+- LLM step size: **500 samples**
+
+### What the LLM Actually Did
+
+The Qwen-based LLM reached only **38.11% window accuracy** and **44.44% trial accuracy**. The trial-level prediction distribution reveals the most important failure mode:
+
+| Predicted class | Number of trials | Share |
+|------|------:|------:|
+| Negative | 0 | 0.0% |
+| Neutral | 34 | 75.6% |
+| Positive | 11 | 24.4% |
+
+The LLM did not simply confuse two classes. It almost completely failed to recover the negative class. This makes the feature-distribution analysis essential: if the prompt says that certain EEG patterns should indicate negative emotion, but the actual feature values do not form a clean negative pattern, the model has no reliable basis for following that logic.
+
+### Feature Distribution Implication
+
+![Standardized feature distributions by class](output/llm_feature_distribution_analysis/standardized_feature_distributions_by_class.png)
+
+The standardized distribution plot shows that most values passed to the LLM overlap across negative, neutral, and positive windows. This is the key reason the LLM task is difficult. The prompt describes neuroscience-inspired rules, but the numerical evidence does not behave like a simple rule table.
+
+Some features do carry useful class information:
+
+| Feature | Interpretation | Eta-squared |
+|------|------|------:|
+| `gamma_ratio` | Global high-frequency activity | 0.4796 |
+| `gamma_beta_ratio` | Relative gamma dominance over beta | 0.4431 |
+| `alpha_ratio` | Global alpha proportion | 0.3269 |
+| `beta_alpha_ratio` | Relative beta dominance over alpha | 0.3013 |
+| `temporal_alpha` | Temporal alpha power | 0.1950 |
+| `occipital_alpha` | Posterior alpha activity | 0.0869 |
+
+![Feature class separability](output/llm_feature_distribution_analysis/feature_class_separability_eta_squared.png)
+
+The implication is subtle but important: the features are not meaningless, but their information is statistical rather than directly symbolic. A supervised model can learn that statistical structure from examples. A zero-shot LLM only receives isolated numbers and prompt instructions, so it cannot reliably infer the correct dataset-specific decision boundary.
+
+### FAA and the Sign-Convention Problem
+
+Frontal Alpha Asymmetry (FAA) was especially important to inspect because it is often associated with emotional valence and approach-withdrawal behavior. However, the implementation uses this convention:
+
+```text
+FAA = log(left alpha power) - log(right alpha power)
+```
+
+This must be interpreted carefully. Alpha power is often treated as inversely related to cortical activation. Therefore, a positive FAA value in this implementation means stronger left alpha power relative to right alpha power. It does not automatically mean stronger left frontal activation.
+
+![FAA sign rates by class](output/llm_feature_distribution_analysis/faa_positive_sign_rate_by_class.png)
+
+The FAA values did not strongly separate the classes:
+
+| FAA feature | Eta-squared | Negative median | Neutral median | Positive median |
+|------|------:|------:|------:|------:|
+| `faa_f3_f4` | 0.0248 | 0.1837 | -0.1317 | 0.1836 |
+| `faa_fp1_fp2` | 0.0169 | -0.0835 | -0.1410 | -0.0845 |
+| `faa_f7_f8` | 0.0056 | 0.8525 | 0.7681 | 0.8603 |
+
+This weakens a simple explanation such as "left dominance produces positive emotion." In this project, FAA cannot be used as a clean standalone argument for the LLM behavior. It may still be a meaningful EEG feature, but only if the preprocessing, reference scheme, channel selection, alpha-band definition, and sign convention are handled very explicitly.
+
+### Prompt-Rule Diagnostics
+
+The prompt expected positive emotion to be associated with stronger frontal engagement, stronger gamma-related activity, and weaker posterior inhibition. To test this, the analysis built diagnostic scores from standardized feature groups.
+
+![Prompt rule diagnostics](output/llm_feature_distribution_analysis/prompt_rule_diagnostics_heatmap.png)
+
+The prompt-positive evidence score was:
+
+- negative windows: **-0.078**
+- neutral windows: **-0.956**
+- positive windows: **0.591**
+
+Positive windows do show stronger positive evidence on average, which is encouraging. However, negative windows are not strongly separated in the opposite direction, and neutral windows are not simply centered between negative and positive. This explains why the LLM did not behave like a clean neuroscience rule engine. The prompt asked for structured reasoning, but the feature distributions did not provide a stable structure for that reasoning.
+
+### Updated LLM Conclusion
+
+The LLM result should be interpreted as a failure of **zero-shot symbolic EEG reasoning**, not as proof that EEG contains no emotion-related information.
+
+The supervised models performed better because they were trained to learn empirical class boundaries. Logistic Regression, LSTM, and TCN do not require every feature to follow a perfectly interpretable rule. They only need consistent statistical structure. The LLM, by contrast, was expected to apply general natural-language knowledge to uncalibrated EEG feature values.
+
+This leads to the main conclusion:
+
+> A general-purpose LLM is not well suited for EEG emotion classification when it receives only scalar EEG summaries and is expected to infer neurophysiological class boundaries from prompt text alone.
+
+For an LLM-based EEG classifier to become more convincing, it would likely need:
+
+- task-specific calibration or fine-tuning
+- explicit dataset-level normalization statistics
+- corrected and carefully explained FAA sign conventions
+- stronger feature selection based on class separability
+- spatial and temporal EEG representations rather than isolated scalar summaries
+- tool-assisted reasoning over distributions, not only single-window prompt values
+
+In this setup, the LLM is more useful as an interpretability and reporting assistant than as the primary classifier. If extensive feature engineering and statistical calibration are required, classical ML and deep learning remain more appropriate for the classification task itself.
+
 ---
 
 ## Key Takeaway
@@ -541,4 +670,4 @@ This explains why:
 
 ---
 
-**Last Updated**: June 19, 2026
+**Last Updated**: June 28, 2026
