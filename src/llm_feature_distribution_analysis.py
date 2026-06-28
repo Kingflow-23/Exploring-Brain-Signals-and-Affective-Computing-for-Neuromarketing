@@ -20,9 +20,17 @@ import pandas as pd
 from scipy.signal import welch
 
 from benchmark import load_test_data, prepare_llm_data
-from config import DEFAULT_FS, FRONTAL_PAIRS_IDX, LLM_STEP_SIZE, LLM_WINDOW_SIZE, OUTPUT_DIR
+from config import (
+    DEFAULT_FS,
+    FRONTAL_PAIRS_IDX,
+    LLM_STEP_SIZE,
+    LLM_WINDOW_SIZE,
+    OUTPUT_DIR,
+)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+)
 logger = logging.getLogger("LLM_FEATURE_DISTRIBUTION")
 
 
@@ -118,7 +126,10 @@ def cohens_d(a: pd.Series, b: pd.Series) -> float:
     b = b.dropna().to_numpy(dtype=float)
     if len(a) < 2 or len(b) < 2:
         return np.nan
-    pooled = np.sqrt(((len(a) - 1) * np.var(a, ddof=1) + (len(b) - 1) * np.var(b, ddof=1)) / (len(a) + len(b) - 2))
+    pooled = np.sqrt(
+        ((len(a) - 1) * np.var(a, ddof=1) + (len(b) - 1) * np.var(b, ddof=1))
+        / (len(a) + len(b) - 2)
+    )
     if pooled <= 1e-12:
         return 0.0
     return float((np.mean(a) - np.mean(b)) / pooled)
@@ -144,7 +155,9 @@ def extract_llm_feature_table(out_dir: Path, force: bool = False) -> pd.DataFram
             df.to_csv(cache_path, index=False)
             logger.info("Saved parsed feature table: %s", cache_path)
             return df
-        logger.warning("Existing Values.txt could not be parsed; falling back to extraction.")
+        logger.warning(
+            "Existing Values.txt could not be parsed; falling back to extraction."
+        )
 
     logger.info("Loading held-out test data with the LLM preprocessing path...")
     raw_test = load_test_data()
@@ -164,7 +177,12 @@ def extract_llm_feature_table(out_dir: Path, force: bool = False) -> pd.DataFram
                 "window_size": LLM_WINDOW_SIZE,
                 "step_size": LLM_STEP_SIZE,
             }
-            row.update({feature: safe_float(features.get(feature, np.nan)) for feature in FEATURE_ORDER})
+            row.update(
+                {
+                    feature: safe_float(features.get(feature, np.nan))
+                    for feature in FEATURE_ORDER
+                }
+            )
             rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -205,7 +223,9 @@ def fast_extract_eeg_features(signal: np.ndarray, fs: int = DEFAULT_FS) -> dict:
     faa_keys = ["faa_f3_f4", "faa_f7_f8", "faa_fp1_fp2"]
     faa_vals = {}
     for key, (left_i, right_i) in zip(faa_keys, FRONTAL_PAIRS_IDX):
-        faa_vals[key] = float(np.log(bp["alpha"][left_i] + eps) - np.log(bp["alpha"][right_i] + eps))
+        faa_vals[key] = float(
+            np.log(bp["alpha"][left_i] + eps) - np.log(bp["alpha"][right_i] + eps)
+        )
 
     frontal = slice(0, 20)
     temporal = slice(20, 40)
@@ -317,11 +337,15 @@ def build_feature_summary(df: pd.DataFrame, out_dir: Path) -> pd.DataFrame:
 def build_rule_diagnostics(df: pd.DataFrame, out_dir: Path) -> pd.DataFrame:
     z = pd.DataFrame({feature: robust_zscore(df[feature]) for feature in FEATURE_ORDER})
 
-    diagnostics = df[["subject", "trial", "rep", "window_idx", "label", "label_name"]].copy()
+    diagnostics = df[
+        ["subject", "trial", "rep", "window_idx", "label", "label_name"]
+    ].copy()
     diagnostics["frontal_engagement_z"] = z[
         ["frontal_gamma", "frontal_alpha", "activity", "gamma_beta_ratio"]
     ].mean(axis=1)
-    diagnostics["posterior_alpha_inhibition_z"] = z[["occipital_alpha", "alpha_ratio"]].mean(axis=1)
+    diagnostics["posterior_alpha_inhibition_z"] = z[
+        ["occipital_alpha", "alpha_ratio"]
+    ].mean(axis=1)
     diagnostics["frontal_over_occipital_alpha_z"] = z["frontal_occipital_alpha_ratio"]
 
     # The implementation computes log(left alpha) - log(right alpha).
@@ -330,14 +354,25 @@ def build_rule_diagnostics(df: pd.DataFrame, out_dir: Path) -> pd.DataFrame:
     diagnostics["faa_power_left_minus_right_z"] = z[
         ["faa_fp1_fp2", "faa_f3_f4", "faa_f7_f8"]
     ].mean(axis=1)
-    diagnostics["faa_activation_left_minus_right_z"] = -diagnostics["faa_power_left_minus_right_z"]
+    diagnostics["faa_activation_left_minus_right_z"] = -diagnostics[
+        "faa_power_left_minus_right_z"
+    ]
 
-    diagnostics["prompt_positive_evidence_z"] = diagnostics[
-        ["frontal_engagement_z", "frontal_over_occipital_alpha_z", "faa_activation_left_minus_right_z"]
-    ].mean(axis=1) - diagnostics["posterior_alpha_inhibition_z"]
-    diagnostics["prompt_negative_evidence_z"] = diagnostics["posterior_alpha_inhibition_z"] - diagnostics[
-        ["frontal_engagement_z", "frontal_over_occipital_alpha_z"]
-    ].mean(axis=1)
+    diagnostics["prompt_positive_evidence_z"] = (
+        diagnostics[
+            [
+                "frontal_engagement_z",
+                "frontal_over_occipital_alpha_z",
+                "faa_activation_left_minus_right_z",
+            ]
+        ].mean(axis=1)
+        - diagnostics["posterior_alpha_inhibition_z"]
+    )
+    diagnostics["prompt_negative_evidence_z"] = diagnostics[
+        "posterior_alpha_inhibition_z"
+    ] - diagnostics[["frontal_engagement_z", "frontal_over_occipital_alpha_z"]].mean(
+        axis=1
+    )
 
     diagnostics.to_csv(out_dir / "prompt_rule_diagnostics.csv", index=False)
 
@@ -347,7 +382,10 @@ def build_rule_diagnostics(df: pd.DataFrame, out_dir: Path) -> pd.DataFrame:
 
 
 def latest_benchmark_json() -> Optional[Path]:
-    files = sorted(Path(OUTPUT_DIR).glob("benchmark_inference_*.json"), key=lambda p: p.stat().st_mtime)
+    files = sorted(
+        Path(OUTPUT_DIR).glob("benchmark_inference_*.json"),
+        key=lambda p: p.stat().st_mtime,
+    )
     return files[-1] if files else None
 
 
@@ -371,13 +409,22 @@ def read_llm_metrics() -> Dict:
 
 def plot_feature_boxplots(df: pd.DataFrame, out_dir: Path) -> None:
     for group_name, features in FEATURE_GROUPS.items():
-        fig, axes = plt.subplots(len(features), 1, figsize=(10, max(3.0, 2.1 * len(features))), sharex=False)
+        fig, axes = plt.subplots(
+            len(features), 1, figsize=(10, max(3.0, 2.1 * len(features))), sharex=False
+        )
         if len(features) == 1:
             axes = [axes]
 
         for ax, feature in zip(axes, features):
-            data = [df.loc[df["label"] == label_id, feature].dropna() for label_id in LABEL_NAMES]
-            ax.boxplot(data, tick_labels=[LABEL_NAMES[i] for i in LABEL_NAMES], showfliers=False)
+            data = [
+                df.loc[df["label"] == label_id, feature].dropna()
+                for label_id in LABEL_NAMES
+            ]
+            ax.boxplot(
+                data,
+                tick_labels=[LABEL_NAMES[i] for i in LABEL_NAMES],
+                showfliers=False,
+            )
             ax.set_title(feature)
             ax.set_ylabel("prompt value")
             ax.grid(axis="y", alpha=0.25)
@@ -403,7 +450,9 @@ def plot_standardized_overview(df: pd.DataFrame, out_dir: Path) -> None:
             positions.append(i + offset[j])
             labels.append(z.loc[z["label_name"] == label_name, feature].dropna())
 
-    box = ax.boxplot(labels, positions=positions, widths=0.22, patch_artist=True, showfliers=False)
+    box = ax.boxplot(
+        labels, positions=positions, widths=0.22, patch_artist=True, showfliers=False
+    )
     for idx, patch in enumerate(box["boxes"]):
         patch.set_facecolor(colors[idx % 3])
         patch.set_alpha(0.75)
@@ -415,7 +464,9 @@ def plot_standardized_overview(df: pd.DataFrame, out_dir: Path) -> None:
     ax.axhline(0, color="black", linewidth=0.8, alpha=0.5)
     ax.grid(axis="y", alpha=0.25)
     ax.legend(
-        handles=[plt.Rectangle((0, 0), 1, 1, color=color, alpha=0.75) for color in colors],
+        handles=[
+            plt.Rectangle((0, 0), 1, 1, color=color, alpha=0.75) for color in colors
+        ],
         labels=["negative", "neutral", "positive"],
         loc="upper right",
     )
@@ -436,7 +487,9 @@ def plot_separability(summary: pd.DataFrame, out_dir: Path) -> None:
     plt.close(fig)
 
 
-def plot_faa_diagnostics(df: pd.DataFrame, diagnostics: pd.DataFrame, out_dir: Path) -> None:
+def plot_faa_diagnostics(
+    df: pd.DataFrame, diagnostics: pd.DataFrame, out_dir: Path
+) -> None:
     faa_features = ["faa_fp1_fp2", "faa_f3_f4", "faa_f7_f8"]
 
     sign_rows = []
@@ -458,13 +511,17 @@ def plot_faa_diagnostics(df: pd.DataFrame, diagnostics: pd.DataFrame, out_dir: P
     x = np.arange(len(faa_features))
     width = 0.25
     for idx, label_name in enumerate(["negative", "neutral", "positive"]):
-        values = sign_df[sign_df["label_name"] == label_name]["positive_power_sign_rate"].to_numpy()
+        values = sign_df[sign_df["label_name"] == label_name][
+            "positive_power_sign_rate"
+        ].to_numpy()
         ax.bar(x + (idx - 1) * width, values, width=width, label=label_name)
     ax.set_xticks(x)
     ax.set_xticklabels(faa_features)
     ax.set_ylim(0, 1)
     ax.set_ylabel("fraction of windows with FAA > 0")
-    ax.set_title("FAA sign rates using implementation convention: log(left alpha) - log(right alpha)")
+    ax.set_title(
+        "FAA sign rates using implementation convention: log(left alpha) - log(right alpha)"
+    )
     ax.legend()
     ax.grid(axis="y", alpha=0.25)
     fig.tight_layout()
@@ -480,7 +537,11 @@ def plot_faa_diagnostics(df: pd.DataFrame, diagnostics: pd.DataFrame, out_dir: P
         "prompt_positive_evidence_z",
         "prompt_negative_evidence_z",
     ]
-    means = diagnostics.groupby("label_name")[plot_cols].mean().loc[["negative", "neutral", "positive"]]
+    means = (
+        diagnostics.groupby("label_name")[plot_cols]
+        .mean()
+        .loc[["negative", "neutral", "positive"]]
+    )
 
     fig, ax = plt.subplots(figsize=(11, 4.5))
     im = ax.imshow(means.to_numpy(), cmap="coolwarm", aspect="auto")
@@ -512,7 +573,9 @@ def confusion_bias_sentence(metrics: Dict) -> str:
         f"{LABEL_NAMES[i]}: {int(pred_totals[i])} ({pred_totals[i] / total:.1%})"
         for i in range(min(len(pred_totals), 3))
     ]
-    return "At trial level, the LLM prediction distribution was " + ", ".join(parts) + "."
+    return (
+        "At trial level, the LLM prediction distribution was " + ", ".join(parts) + "."
+    )
 
 
 def metric_pct(metrics: Dict, level: str, key: str) -> str:
@@ -657,7 +720,12 @@ def generate_discussion_readme(
 
 
 def format_counts(series: pd.Series) -> str:
-    counts = series.value_counts().reindex(["negative", "neutral", "positive"]).fillna(0).astype(int)
+    counts = (
+        series.value_counts()
+        .reindex(["negative", "neutral", "positive"])
+        .fillna(0)
+        .astype(int)
+    )
     return ", ".join(f"{label}={count:,}" for label, count in counts.items())
 
 
