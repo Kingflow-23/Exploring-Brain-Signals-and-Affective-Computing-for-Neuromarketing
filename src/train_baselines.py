@@ -49,6 +49,7 @@ Output:
 import os
 import time
 import json
+import torch
 import joblib
 import logging
 import numpy as np
@@ -62,6 +63,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from xgboost import XGBClassifier
+from tabicl import TabICLClassifier
 from sklearn.linear_model import SGDClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
@@ -77,6 +79,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("BASELINE_TRAINER")
+
+TABICL_USE_CUDA = torch.cuda.is_available()
 
 
 def extract_dataset_features(processed_dataset):
@@ -187,6 +191,13 @@ def build_models():
             reg_lambda=1.0,
             tree_method="hist",
             eval_metric="mlogloss",
+            random_state=RANDOM_STATE,
+        ),
+        # -----------------------
+        # TABULAR FOUNDATION MODEL (IN-CONTEXT LEARNING, NO TRAINING)
+        # -----------------------
+        "tabicl": TabICLClassifier(
+            device="cuda" if TABICL_USE_CUDA else "cpu",
             random_state=RANDOM_STATE,
         ),
     }
