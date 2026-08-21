@@ -654,15 +654,6 @@ This explains why:
 
 ---
 
-## Authors
-
-- [**Florian HOUNKPATIN**](https://www.linkedin.com/in/florian-hounkpatin/)
-- [**Noémi DOMBOU**](https://www.linkedin.com/in/noemi-dombou/)
-- [**Axel ONOBIONO**](https://www.linkedin.com/in/axel-onobiono/)
-- [**Ephraim KOSSONOU**](https://www.linkedin.com/in/ephraïm-kossonou/)
-
----
-
 ## References
 
 - Investigating Critical Frequency Bands and Channels for EEG-based Emotion Recognition with Deep Neural Networks", Wei-Long Zheng, and Bao-Liang Lu, IEEE Transactions on Autonomous Mental Development (IEEE TAMD), 2015.
